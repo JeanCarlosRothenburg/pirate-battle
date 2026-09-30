@@ -15,8 +15,9 @@ React screens, the ranking/history API layer and the Playwright suite are the ne
 | Frontal and broadside weapons, cooldowns, projectile lifetime | done |
 | Chaser and Shooter behaviour, seeded spawner | done |
 | Match rules: scoring, time out, death, pause, restart | done |
-| PixiJS renderer and resource lifecycle | pending |
-| React screens, HUD, touch controls, accessibility | pending |
+| PixiJS renderer, provided assets, effects and sounds | done |
+| Asset loading with progress, failure and retry | done |
+| React screens, HUD, touch controls, accessibility | keyboard + in-game HUD only |
 | Ranking and Match History with MSW | pending |
 | Playwright E2E and visual regression | pending |
 | Performance profiling report | pending |
@@ -37,8 +38,28 @@ npm run dev
 | `npm run preview` | Serve the production build |
 | `npm run typecheck` | Strict TypeScript check |
 | `npm run lint` | ESLint |
-| `npm test` | Unit tests for the simulation core |
+| `npm test` | Unit tests (simulation, input, HUD, atlas conversion) |
 | `npm run e2e` | Playwright suite |
+
+## Controls
+
+| Key | Action |
+| --- | --- |
+| Mouse | Steer: the ship turns toward the pointer, as in slither.io |
+| W or ↑ | Sail forward |
+| A / D or ← / → | Turn; overrides the mouse until it moves again |
+| Space | Bow gun |
+| Q / E | Port / starboard broadside |
+| P or Esc | Pause and resume (also the on-screen button) |
+| Enter | Start or restart a match |
+| M | Mute |
+
+The match also pauses when the window loses focus or the tab is hidden.
+
+## Assets
+
+The challenge assets live in `assets/` unmodified; see `assets/SOURCES.md` for their origin
+and the conversions applied at load time.
 
 ## Gameplay configuration
 
