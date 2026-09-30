@@ -12,12 +12,23 @@ export class FixedStepRunner {
 
   constructor(private readonly step: number = FIXED_STEP_SECONDS) {}
 
-  /** Returns the interpolation alpha to use when rendering this frame. */
-  advance(simulation: Simulation, frameSeconds: number, intent: InputIntent): number {
+  /**
+   * Returns the interpolation alpha to use when rendering this frame.
+   *
+   * `simulation.events` only holds the latest step's events, so `onStep` runs after every
+   * step to let a consumer read them before the next step clears them.
+   */
+  advance(
+    simulation: Simulation,
+    frameSeconds: number,
+    intent: InputIntent,
+    onStep?: (simulation: Simulation) => void,
+  ): number {
     this.accumulator += Math.min(frameSeconds, MAX_FRAME_SECONDS)
     this.stepsLastFrame = 0
     while (this.accumulator >= this.step) {
       simulation.step(this.step, intent)
+      onStep?.(simulation)
       this.accumulator -= this.step
       this.stepsLastFrame++
     }

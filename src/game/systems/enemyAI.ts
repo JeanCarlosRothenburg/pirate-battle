@@ -4,6 +4,7 @@ import type { Ship } from '../sim/types'
 
 export interface EnemyDecision {
   readonly targetAngle: number
+  /** 0 (hold) to 1 (full ahead). */
   readonly throttle: number
   readonly wantsToFire: boolean
 }
@@ -17,9 +18,8 @@ export function decideShooter(enemy: Ship, player: Ship, config: ShooterConfig):
   const targetAngle = Math.atan2(player.y - enemy.y, player.x - enemy.x)
   const gap = distance(enemy.x, enemy.y, player.x, player.y)
 
-  let throttle = 0
-  if (gap > config.preferredRange) throttle = 1
-  else if (gap < config.preferredRange * 0.6) throttle = -0.6
+  // Ships only sail forward: close in until the preferred range, then hold and keep aiming.
+  const throttle = gap > config.preferredRange ? 1 : 0
 
   return { targetAngle, throttle, wantsToFire: gap <= config.attackRange }
 }

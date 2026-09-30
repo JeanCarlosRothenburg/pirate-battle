@@ -37,7 +37,6 @@ export interface PlayerConfig {
   readonly maxHp: number
   readonly radius: number
   readonly speed: number
-  readonly reverseSpeed: number
   readonly acceleration: number
   readonly turnRate: number
   readonly frontWeapon: WeaponConfig
@@ -72,6 +71,32 @@ export interface SpawnConfig {
   readonly weights: { readonly chaser: number; readonly shooter: number }
 }
 
+/**
+ * Drag while a hull scrapes an island, as the fraction of tangential speed lost per second.
+ * Each contact step keeps `1 - hullFriction * dt` of the sliding motion, and of the stored
+ * speed. 0 slides freely; 60 stops the ship on contact at the fixed 1/60 s step.
+ */
+export interface HullFrictionConfig {
+  readonly player: number
+  readonly enemy: number
+}
+
+/** Enemy obstacle avoidance by context steering; see `systems/obstacleAvoidance.ts`. */
+export interface AvoidanceConfig {
+  /** Headings sampled around the ship. More slots, finer detours, more ray casts per step. */
+  readonly slots: number
+  /** How far ahead islands and walls are seen, in px. */
+  readonly lookahead: number
+  /** Clearance kept beyond the hull radius, in px. */
+  readonly margin: number
+  /** Extra interest toward the current heading (0–1), so detours do not flip side. */
+  readonly headingBias: number
+  /** Headings within this much of the safest heading's danger (0–1) stay eligible. */
+  readonly dangerTolerance: number
+  /** Share of throttle given up at full danger (0–1), so ships turn tighter near islands. */
+  readonly slowdown: number
+}
+
 export interface GameConfig {
   readonly sessionSeconds: number
   readonly arena: ArenaConfig
@@ -79,6 +104,8 @@ export interface GameConfig {
   readonly chaser: ChaserConfig
   readonly shooter: ShooterConfig
   readonly spawn: SpawnConfig
+  readonly hullFriction: HullFrictionConfig
+  readonly avoidance: AvoidanceConfig
 }
 
 export const DEFAULT_ARENA: ArenaConfig = {
@@ -101,7 +128,6 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     maxHp: 100,
     radius: 26,
     speed: 190,
-    reverseSpeed: 90,
     acceleration: 480,
     turnRate: 2.3,
     frontWeapon: {
@@ -146,6 +172,25 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     placementAttempts: 40,
     weights: { chaser: 0.5, shooter: 0.5 },
   },
+  hullFriction: {
+    // Scraping costs the player about 2.5 % of speed per step: the hull noticeably grinds,
+    // but with the throttle held the ship keeps about 97 % of cruise speed along the shore.
+    player: 1.5,
+    // Enemies scrape a little harder, so a pursuer rounding an island visibly loses ground
+    // and the player can use islands to break contact.
+    enemy: 2.5,
+  },
+  avoidance: {
+    // 16 headings (22.5° apart), refined between slots, are plenty at these turn rates.
+    slots: 16,
+    // About one second of Chaser travel: enough warning to turn at 2.7 rad/s, short enough
+    // that islands far behind the player do not bend the chase.
+    lookahead: 170,
+    margin: 10,
+    headingBias: 0.2,
+    dangerTolerance: 0.1,
+    slowdown: 0.4,
+  },
 }
 
 export interface TunableOptions {
@@ -172,6 +217,10 @@ export function configFingerprint(config: GameConfig): string {
     config.shooter.maxHp,
     config.arena.width,
     config.arena.height,
+    config.hullFriction.player,
+    config.hullFriction.enemy,
+    config.avoidance.lookahead,
+    config.avoidance.slots,
   ]
   let hash = 2166136261
   const source = parts.join(':')

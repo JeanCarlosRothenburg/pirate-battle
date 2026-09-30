@@ -1,15 +1,18 @@
 import type { GameConfig } from '../config/gameConfig'
 import { applyDamage, frontShots, initProjectile, sideShots } from '../systems/combat'
 import type { ProjectileSpawn } from '../systems/combat'
+import type { MoveResult } from '../systems/collision'
 import {
   circlesOverlap,
+  createMoveResult,
   resolveCircleMove,
   segmentHitsAnyIsland,
   segmentHitsCircle,
 } from '../systems/collision'
 import { decideChaser, decideShooter } from '../systems/enemyAI'
+import { ContextSteering } from '../systems/obstacleAvoidance'
 import { findSpawnPoint, pickEnemyKind } from '../systems/spawner'
-import { clamp, moveToward, turnToward } from './mathUtils'
+import { clamp, distance, moveToward, turnToward } from './mathUtils'
 import { Pool, compactInPlace } from './pool'
 import { createRng } from './rng'
 import type { Rng } from './rng'
@@ -25,6 +28,7 @@ import type {
   ShipKind,
   Ship,
   SimEvent,
+  Weapon,
 } from './types'
 
 export interface SimulationOptions {
@@ -57,6 +61,8 @@ export class Simulation {
   private readonly broadphase: SpatialHash
   private readonly candidates: number[] = []
   private readonly pendingShots: ProjectileSpawn[] = []
+  private readonly move: MoveResult = createMoveResult()
+  private readonly steering: ContextSteering
 
   constructor(options: SimulationOptions) {
     this.config = options.config
@@ -65,6 +71,7 @@ export class Simulation {
     this.shipPool = new Pool<Ship>(createShip, resetShip, SHIP_POOL_SIZE)
     this.projectilePool = new Pool<Projectile>(createProjectile, resetProjectile, PROJECTILE_POOL_SIZE)
     this.broadphase = new SpatialHash(this.config.arena.width, this.config.arena.height, 128)
+    this.steering = new ContextSteering(this.config.avoidance)
     this.player = createShip()
     this.initPlayer()
   }
@@ -209,33 +216,32 @@ export class Simulation {
     const ship = this.player
     if (!ship.alive) return
 
-    ship.angle = turnToward(ship.angle, ship.angle + intent.turn * cfg.turnRate * dt, Math.PI)
+    if (intent.turn !== 0) {
+      ship.angle = turnToward(ship.angle, ship.angle + intent.turn * cfg.turnRate * dt, Math.PI)
+    } else if (intent.steerTo) {
+      // Re-aimed every step from the ship's current position. Inside the dead zone (the
+      // pointer over the hull) the heading holds instead of spinning.
+      const dx = intent.steerX - ship.x
+      const dy = intent.steerY - ship.y
+      if (dx * dx + dy * dy > ship.radius * ship.radius) {
+        ship.angle = turnToward(ship.angle, Math.atan2(dy, dx), cfg.turnRate * dt)
+      }
+    }
 
-    const targetSpeed =
-      intent.throttle >= 0 ? intent.throttle * cfg.speed : intent.throttle * cfg.reverseSpeed
+    const targetSpeed = clamp(intent.throttle, 0, 1) * cfg.speed
     ship.speed = moveToward(ship.speed, targetSpeed, cfg.acceleration * dt)
 
-    const move = resolveCircleMove(
-      ship.x,
-      ship.y,
-      Math.cos(ship.angle) * ship.speed * dt,
-      Math.sin(ship.angle) * ship.speed * dt,
-      ship.radius,
-      this.config.arena,
-    )
-    ship.x = move.x
-    ship.y = move.y
-    if (move.blocked) ship.speed = 0
+    this.moveShip(ship, dt, this.config.hullFriction.player)
 
     if (intent.fireFront && ship.frontCooldown <= 0) {
       frontShots(ship, cfg.frontWeapon, this.pendingShots)
-      this.emitShots(this.pendingShots, ship)
+      this.emitShots(this.pendingShots, ship, 'front')
       ship.frontCooldown = cfg.frontWeapon.cooldown
     }
     if (ship.sideCooldown <= 0 && (intent.fireLeft || intent.fireRight)) {
       const side = intent.fireLeft ? 'left' : 'right'
       sideShots(ship, cfg.sideWeapon, side, this.pendingShots)
-      this.emitShots(this.pendingShots, ship)
+      this.emitShots(this.pendingShots, ship, 'side')
       ship.sideCooldown = cfg.sideWeapon.cooldown
     }
   }
@@ -249,29 +255,70 @@ export class Simulation {
         ? decideChaser(enemy, this.player, this.config.chaser)
         : decideShooter(enemy, this.player, this.config.shooter)
 
-      enemy.angle = turnToward(enemy.angle, decision.targetAngle, stats.turnRate * dt)
-      enemy.speed = decision.throttle * stats.speed
+      // The AI decides where it wants to go; avoidance bends that heading around islands.
+      let targetAngle = decision.targetAngle
+      let throttle = clamp(decision.throttle, 0, 1)
+      if (throttle > 0) {
+        const steer = this.steering.steer(
+          enemy.x,
+          enemy.y,
+          enemy.angle,
+          enemy.radius,
+          targetAngle,
+          distance(enemy.x, enemy.y, this.player.x, this.player.y),
+          this.config.arena,
+        )
+        targetAngle = steer.angle
+        throttle *= 1 - this.config.avoidance.slowdown * steer.danger
+      }
 
-      const move = resolveCircleMove(
-        enemy.x,
-        enemy.y,
-        Math.cos(enemy.angle) * enemy.speed * dt,
-        Math.sin(enemy.angle) * enemy.speed * dt,
-        enemy.radius,
-        this.config.arena,
-      )
-      enemy.x = move.x
-      enemy.y = move.y
+      enemy.angle = turnToward(enemy.angle, targetAngle, stats.turnRate * dt)
+      enemy.speed = throttle * stats.speed
+
+      this.moveShip(enemy, dt, this.config.hullFriction.enemy)
 
       if (!isChaser && decision.wantsToFire && enemy.frontCooldown <= 0) {
         frontShots(enemy, this.config.shooter.weapon, this.pendingShots)
-        this.emitShots(this.pendingShots, enemy)
+        this.emitShots(this.pendingShots, enemy, 'front')
         enemy.frontCooldown = this.config.shooter.weapon.cooldown
       }
     }
   }
 
-  private emitShots(shots: readonly ProjectileSpawn[], shooter: Ship): void {
+  /**
+   * Sails a ship along its heading, sliding along any island it touches. `ship.speed` is the
+   * thrust along the heading: contact removes only the part of each step's movement that
+   * pushes into the surface, so a ship at an angle keeps scraping along the shore while a
+   * head-on ship stops. Hull friction takes the same share from the slide and the stored
+   * speed, so the two stay in step.
+   */
+  private moveShip(ship: Ship, dt: number, hullFriction: number): void {
+    const friction = Math.max(0, 1 - hullFriction * dt)
+    const move = resolveCircleMove(
+      ship.x,
+      ship.y,
+      Math.cos(ship.angle) * ship.speed * dt,
+      Math.sin(ship.angle) * ship.speed * dt,
+      ship.radius,
+      this.config.arena,
+      friction,
+      this.move,
+    )
+    ship.x = move.x
+    ship.y = move.y
+    if (!move.contact) return
+
+    ship.speed *= friction
+    this.events.push({
+      type: 'scrape',
+      faction: ship.faction,
+      x: move.contactX,
+      y: move.contactY,
+      strength: move.impact / dt,
+    })
+  }
+
+  private emitShots(shots: readonly ProjectileSpawn[], shooter: Ship, weapon: Weapon): void {
     for (const shot of shots) {
       const projectile = this.projectilePool.acquire()
       initProjectile(projectile, this.nextId++, shot)
@@ -282,6 +329,7 @@ export class Simulation {
       this.events.push({
         type: 'shot',
         faction: shooter.faction,
+        weapon,
         x: first.x,
         y: first.y,
         angle: first.angle,
@@ -303,7 +351,7 @@ export class Simulation {
 
       if (segmentHitsAnyIsland(projectile.x, projectile.y, dx, dy, projectile.radius, arena)) {
         projectile.alive = false
-        this.events.push({ type: 'hit', x: projectile.x, y: projectile.y, faction: projectile.faction })
+        this.events.push({ type: 'hit', x: projectile.x, y: projectile.y, faction: projectile.faction, surface: 'island' })
         continue
       }
 
@@ -360,7 +408,7 @@ export class Simulation {
         }
         projectile.alive = false
         const killed = applyDamage(enemy, projectile.damage)
-        this.events.push({ type: 'hit', x: enemy.x, y: enemy.y, faction: 'player' })
+        this.events.push({ type: 'hit', x: enemy.x, y: enemy.y, faction: 'player', surface: 'ship' })
         if (killed) this.killEnemy(enemy, 'projectile')
         return true
       }
@@ -383,10 +431,10 @@ export class Simulation {
     }
     projectile.alive = false
     applyDamage(this.player, projectile.damage)
-    this.events.push({ type: 'hit', x: this.player.x, y: this.player.y, faction: 'enemy' })
+    this.events.push({ type: 'hit', x: this.player.x, y: this.player.y, faction: 'enemy', surface: 'ship' })
     this.events.push({ type: 'playerDamaged', amount: projectile.damage, hp: this.player.hp })
     if (!this.player.alive) {
-      this.events.push({ type: 'explosion', x: this.player.x, y: this.player.y, kind: 'player' })
+      this.events.push({ type: 'explosion', x: this.player.x, y: this.player.y, angle: this.player.angle, kind: 'player' })
     }
     return true
   }
@@ -413,7 +461,7 @@ export class Simulation {
       this.events.push({ type: 'playerDamaged', amount: damage, hp: this.player.hp })
       this.killEnemy(enemy, 'selfDestruct')
       if (!this.player.alive) {
-        this.events.push({ type: 'explosion', x: this.player.x, y: this.player.y, kind: 'player' })
+        this.events.push({ type: 'explosion', x: this.player.x, y: this.player.y, angle: this.player.angle, kind: 'player' })
         return
       }
     }
@@ -424,7 +472,7 @@ export class Simulation {
     enemy.alive = false
     const scored = cause === 'projectile'
     if (scored) this.score += 1
-    this.events.push({ type: 'explosion', x: enemy.x, y: enemy.y, kind: enemy.kind })
+    this.events.push({ type: 'explosion', x: enemy.x, y: enemy.y, angle: enemy.angle, kind: enemy.kind })
     this.events.push({ type: 'enemyKilled', kind: enemy.kind, cause, scored })
   }
 

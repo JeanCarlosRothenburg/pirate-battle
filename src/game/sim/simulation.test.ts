@@ -9,6 +9,7 @@ import {
   segmentHitsCircle,
 } from '../systems/collision'
 import { FixedStepRunner } from './loop'
+import { angleDelta, distance } from './mathUtils'
 import { createRng } from './rng'
 import { Simulation } from './simulation'
 import type { InputIntent } from './types'
@@ -123,6 +124,21 @@ describe('frame-rate independence', () => {
     runner.advance(sim, 10, NEUTRAL_INTENT)
     expect(runner.lastStepCount).toBeLessThanOrEqual(15)
   })
+
+  it('hands every step to onStep so no step events are lost in a long frame', () => {
+    const sim = makeSim(peacefulConfig(120))
+    const runner = new FixedStepRunner()
+    let steps = 0
+    let shots = 0
+    // One 0.2 s frame runs 12 steps; the front gun (0.45 s cooldown) fires on the first.
+    runner.advance(sim, 0.2, intent({ fireFront: true }), (s) => {
+      steps++
+      for (const event of s.events) if (event.type === 'shot') shots++
+    })
+    expect(steps).toBe(runner.lastStepCount)
+    expect(shots).toBe(1)
+    expect(sim.events.some((e) => e.type === 'shot')).toBe(false)
+  })
 })
 
 describe('player movement', () => {
@@ -157,12 +173,243 @@ describe('player movement', () => {
     }
   })
 
+  it('pushes a ship that starts inside an island out within one step', () => {
+    for (const [x, y] of [
+      [800 - 80 - 10, 450], // overlapping the rim of the central circular island
+      [200, 660], // centre inside the bottom-left rectangular island
+    ] as const) {
+      const sim = makeSim(peacefulConfig(120))
+      sim.player.x = x
+      sim.player.y = y
+      sim.step(STEP, NEUTRAL_INTENT)
+      expect(circleHitsAnyIsland(sim.player.x, sim.player.y, sim.player.radius, sim.config.arena)).toBe(false)
+    }
+  })
+
+  it('only moves forward: a negative throttle never sails astern', () => {
+    const sim = makeSim(peacefulConfig(120))
+    const startX = sim.player.x
+    const startY = sim.player.y
+    run(sim, 2, intent({ throttle: -1 }))
+    expect(sim.player.speed).toBe(0)
+    expect(sim.player.x).toBe(startX)
+    expect(sim.player.y).toBe(startY)
+  })
+
   it('rotates in both directions', () => {
     const left = makeSim()
     const right = makeSim()
     run(left, 0.5, intent({ turn: -1 }))
     run(right, 0.5, intent({ turn: 1 }))
     expect(left.player.angle).toBeLessThan(right.player.angle)
+  })
+})
+
+describe('pointer steering', () => {
+  function openWaterSim(): Simulation {
+    const sim = makeSim(peacefulConfig(120))
+    sim.player.x = 1000
+    sim.player.y = 450
+    sim.player.angle = 0
+    sim.player.prevAngle = 0
+    return sim
+  }
+
+  it('turns toward the pointer at the turn rate, then holds that heading', () => {
+    const sim = openWaterSim()
+    // A point straight "down" from the ship: a quarter turn away.
+    const toward = intent({ steerTo: true, steerX: 1000, steerY: 700 })
+    const perStep = sim.config.player.turnRate * STEP
+
+    sim.step(STEP, toward)
+    expect(sim.player.angle).toBeCloseTo(perStep, 9)
+
+    run(sim, 1, toward)
+    expect(sim.player.angle).toBeCloseTo(Math.PI / 2, 9)
+  })
+
+  it('re-aims every step from where the ship is now', () => {
+    const sim = openWaterSim()
+    const target = { steerTo: true, steerX: 1300, steerY: 600 }
+    run(sim, 3, intent({ ...target, throttle: 1 }))
+    const bearing = Math.atan2(target.steerY - sim.player.y, target.steerX - sim.player.x)
+    // Having reached the point, it keeps circling it rather than holding the old bearing.
+    expect(Math.abs(angleDelta(sim.player.angle, bearing))).toBeLessThan(Math.PI / 2)
+  })
+
+  it('lets the keyboard override the pointer', () => {
+    const sim = openWaterSim()
+    sim.step(STEP, intent({ turn: -1, steerTo: true, steerX: 1000, steerY: 700 }))
+    expect(sim.player.angle).toBeLessThan(0)
+  })
+
+  it('holds the heading while the pointer is over the hull', () => {
+    const sim = openWaterSim()
+    run(sim, 0.5, intent({ steerTo: true, steerX: 1005, steerY: 460 }))
+    expect(sim.player.angle).toBe(0)
+  })
+})
+
+describe('island contact', () => {
+  // The central island of the default arena: a circle at (800, 450), radius 80, centred
+  // vertically, so the arena is mirror-symmetric across its horizontal axis.
+  const island = { x: 800, y: 450, radius: 80 }
+  const LEAD_IN = 120
+
+  /**
+   * Places the player so that, sailing straight at `heading`, it first touches the island's
+   * left side (normal pointing -x) at 45° to the surface.
+   */
+  function approachAt45(heading: number): Simulation {
+    const sim = makeSim(peacefulConfig(120))
+    const reach = island.radius + sim.player.radius
+    sim.player.x = island.x - reach - Math.cos(heading) * LEAD_IN
+    sim.player.y = island.y - Math.sin(heading) * LEAD_IN
+    sim.player.angle = heading
+    sim.player.speed = 0
+    return sim
+  }
+
+  function firstScrape(sim: Simulation, input: InputIntent, maxSeconds: number) {
+    for (let i = 0; i < maxSeconds * 60; i++) {
+      sim.step(STEP, input)
+      if (sim.events.some((e) => e.type === 'scrape')) return { x: sim.player.x, y: sim.player.y }
+    }
+    throw new Error('the ship never touched the island')
+  }
+
+  it('slides a ship driven at 45° into a circular island along its edge', () => {
+    const sim = approachAt45(-Math.PI / 4)
+    const input = intent({ throttle: 1 })
+    const contact = firstScrape(sim, input, 3)
+
+    let contactSteps = 0
+    for (let i = 0; i < 120; i++) {
+      sim.step(STEP, input)
+      if (sim.events.some((e) => e.type === 'scrape')) {
+        contactSteps++
+        expect(sim.player.speed).toBeGreaterThan(0)
+      }
+      expect(circleHitsAnyIsland(sim.player.x, sim.player.y, sim.player.radius, sim.config.arena)).toBe(false)
+    }
+
+    expect(contactSteps).toBeGreaterThan(1)
+    const travelled = Math.hypot(sim.player.x - contact.x, sim.player.y - contact.y)
+    expect(travelled).toBeGreaterThan(island.radius / 2)
+  })
+
+  it('stops a ship driven head-on into a flat rectangle face', () => {
+    // Bottom-left rectangle (180, 640, 260 × 140): its top face is the line y = 640.
+    const sim = makeSim(peacefulConfig(120))
+    sim.player.x = 310
+    sim.player.y = 640 - sim.player.radius - 100
+    sim.player.angle = Math.PI / 2
+    sim.player.speed = 0
+    const input = intent({ throttle: 1 })
+
+    run(sim, 2, input)
+    const settled = { x: sim.player.x, y: sim.player.y }
+    let scrapes = 0
+    for (let i = 0; i < 60; i++) {
+      sim.step(STEP, input)
+      for (const e of sim.events) if (e.type === 'scrape' && e.strength > 0) scrapes++
+    }
+
+    expect(settled.x).toBeCloseTo(310, 9)
+    expect(settled.y).toBeCloseTo(640 - sim.player.radius, 3)
+    expect(sim.player.x).toBeCloseTo(settled.x, 9)
+    expect(sim.player.y).toBeCloseTo(settled.y, 9)
+    expect(scrapes).toBe(60)
+  })
+
+  it('scrapes toward the side the heading points to', () => {
+    const up = approachAt45(-Math.PI / 4)
+    const down = approachAt45(Math.PI / 4)
+    const input = intent({ throttle: 1 })
+
+    run(up, 1.2, input)
+    run(down, 1.2, input)
+
+    // Mirrored approaches across the island's horizontal axis give mirrored slides.
+    expect(up.player.x).toBeCloseTo(down.player.x, 6)
+    expect(up.player.y - island.y).toBeCloseTo(-(down.player.y - island.y), 6)
+    expect(up.player.y).toBeLessThan(island.y)
+    expect(down.player.y).toBeGreaterThan(island.y)
+  })
+
+  it('reports each contact as a scrape event with the contact point on the surface', () => {
+    const sim = approachAt45(-Math.PI / 4)
+    const input = intent({ throttle: 1 })
+    for (let i = 0; i < 180; i++) {
+      sim.step(STEP, input)
+      const scrape = sim.events.find((e) => e.type === 'scrape')
+      if (scrape === undefined || scrape.type !== 'scrape') continue
+      expect(Math.hypot(scrape.x - island.x, scrape.y - island.y)).toBeCloseTo(island.radius, 3)
+      expect(scrape.strength).toBeGreaterThanOrEqual(0)
+      expect(scrape.faction).toBe('player')
+      return
+    }
+    throw new Error('no scrape event')
+  })
+})
+
+describe('enemy obstacle avoidance', () => {
+  // The central island (800, 450, radius 80) sits exactly between the enemy and the player.
+  const PLAYER = { x: 1010, y: 450 }
+
+  function behindIsland(kind: 'chaser' | 'shooter', enemyX: number, avoidance = DEFAULT_GAME_CONFIG.avoidance) {
+    const sim = makeSim({ ...peacefulConfig(120), avoidance })
+    sim.player.x = PLAYER.x
+    sim.player.y = PLAYER.y
+    const enemy = placeEnemy(sim, kind, enemyX, PLAYER.y, 0)
+    return { sim, enemy }
+  }
+
+  function runWatching(sim: Simulation, seconds: number, until: () => boolean) {
+    let enemyScrapes = 0
+    let reached = false
+    for (let i = 0; i < seconds * 60 && !reached; i++) {
+      sim.step(STEP, NEUTRAL_INTENT)
+      for (const e of sim.events) if (e.type === 'scrape' && e.faction === 'enemy') enemyScrapes++
+      reached = until()
+    }
+    return { enemyScrapes, reached }
+  }
+
+  it('steers a Chaser around an island to reach the player without touching it', () => {
+    const { sim } = behindIsland('chaser', 590)
+    let rammed = false
+    const outcome = runWatching(sim, 8, () => {
+      rammed ||= sim.events.some((e) => e.type === 'enemyKilled' && e.cause === 'selfDestruct')
+      return rammed
+    })
+    expect(outcome.reached).toBe(true)
+    expect(outcome.enemyScrapes).toBe(0)
+  })
+
+  it('leaves a Chaser stuck against the island when avoidance is off', () => {
+    const { sim } = behindIsland('chaser', 590, { ...DEFAULT_GAME_CONFIG.avoidance, lookahead: 0 })
+    const outcome = runWatching(sim, 8, () => sim.enemies.length === 0)
+    expect(outcome.reached).toBe(false)
+    expect(outcome.enemyScrapes).toBeGreaterThan(0)
+  })
+
+  it('steers a Shooter around an island into its preferred range', () => {
+    const { sim, enemy } = behindIsland('shooter', 500)
+    const range = sim.config.shooter.preferredRange
+    const outcome = runWatching(sim, 10, () => distance(enemy.x, enemy.y, PLAYER.x, PLAYER.y) <= range)
+    expect(outcome.reached).toBe(true)
+    expect(outcome.enemyScrapes).toBe(0)
+  })
+
+  it('never lets an enemy end a step inside an island', () => {
+    const sim = makeSim({ sessionSeconds: 180 }, 99)
+    for (let i = 0; i < 180 * 60 && sim.phase === 'running'; i++) {
+      sim.step(STEP, intent({ throttle: 1, turn: Math.sin(i / 70) }))
+      for (const enemy of sim.enemies) {
+        expect(circleHitsAnyIsland(enemy.x, enemy.y, enemy.radius, sim.config.arena)).toBe(false)
+      }
+    }
   })
 })
 
@@ -411,6 +658,25 @@ describe('enemy behaviour', () => {
     expect(sim.projectiles.filter((p) => p.faction === 'enemy')).toHaveLength(0)
   })
 
+  it('makes a Shooter hold position inside its preferred range instead of backing away', () => {
+    const sim = makeSim(peacefulConfig(120))
+    const shooter = spawnEnemyAhead(sim, 'shooter', DEFAULT_GAME_CONFIG.shooter.preferredRange * 0.5)
+    const gapBefore = Math.hypot(shooter.x - sim.player.x, shooter.y - sim.player.y)
+    run(sim, 1)
+    const gapAfter = Math.hypot(shooter.x - sim.player.x, shooter.y - sim.player.y)
+    expect(shooter.speed).toBe(0)
+    expect(gapAfter).toBeCloseTo(gapBefore, 6)
+  })
+
+  it('never moves any ship astern during a full match', () => {
+    const sim = makeSim({ sessionSeconds: 120 }, 7)
+    for (let i = 0; i < 120 * 60 && sim.phase === 'running'; i++) {
+      sim.step(STEP, intent({ throttle: i % 240 < 120 ? 1 : 0, turn: Math.sin(i / 90) }))
+      expect(sim.player.speed).toBeGreaterThanOrEqual(0)
+      for (const enemy of sim.enemies) expect(enemy.speed).toBeGreaterThanOrEqual(0)
+    }
+  })
+
   it('makes a Shooter fire once inside range', () => {
     const sim = makeSim()
     spawnEnemyAhead(sim, 'shooter', DEFAULT_GAME_CONFIG.shooter.attackRange - 50)
@@ -482,6 +748,38 @@ function spawnEnemyAhead(
   enemy.prevX = enemy.x
   enemy.prevY = enemy.y
   enemy.prevAngle = enemy.angle
+  sim.enemies.push(enemy)
+  return enemy
+}
+
+/** Test helper: puts an enemy of `kind` at (x, y), heading `angle`. */
+function placeEnemy(
+  sim: Simulation,
+  kind: 'chaser' | 'shooter',
+  x: number,
+  y: number,
+  angle: number,
+): NonNullable<Simulation['enemies'][number]> {
+  const stats = kind === 'chaser' ? sim.config.chaser : sim.config.shooter
+  const enemy = {
+    id: 9000 + sim.enemies.length,
+    kind,
+    faction: 'enemy' as const,
+    x,
+    y,
+    prevX: x,
+    prevY: y,
+    angle,
+    prevAngle: angle,
+    speed: 0,
+    hp: stats.maxHp,
+    maxHp: stats.maxHp,
+    radius: stats.radius,
+    alive: true,
+    frontCooldown: 0,
+    sideCooldown: 0,
+    hitFlash: 0,
+  }
   sim.enemies.push(enemy)
   return enemy
 }
