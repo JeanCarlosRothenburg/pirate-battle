@@ -15,8 +15,6 @@ export function SubmissionManager() {
 
   useEffect(() => {
     for (const record of queue) {
-      // Read the live status, not this render's snapshot: Strict Mode runs effects twice,
-      // and the second run must see that the first already started sending.
       const store = useSubmissionStore.getState()
       if (store.submissions[record.matchId]?.status !== 'queued') continue
       store.markSending(record.matchId)
@@ -27,7 +25,6 @@ export function SubmissionManager() {
     }
   }, [queue, submissions, mutateAsync])
 
-  // Coming back online is a good moment to try failed records again.
   useEffect(() => {
     const onOnline = (): void => useSubmissionStore.getState().retry()
     window.addEventListener('online', onOnline)

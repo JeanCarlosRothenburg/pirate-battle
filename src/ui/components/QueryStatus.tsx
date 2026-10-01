@@ -7,7 +7,6 @@ interface QueryStatusProps {
   readonly isError: boolean
   readonly error: unknown
   readonly isFetching: boolean
-  /** True when earlier data is still available to show. */
   readonly hasData: boolean
   readonly isEmpty: boolean
   readonly loadingText: string

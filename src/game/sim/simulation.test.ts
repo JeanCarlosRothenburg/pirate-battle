@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_GAME_CONFIG, buildConfig, configFingerprint } from '../config/gameConfig'
 import type { GameConfig } from '../config/gameConfig'
-import { isValidSpawnInterval, isValidSessionSeconds } from '../config/limits'
 import {
   circleHitsAnyIsland,
   isFreeWater,
@@ -67,21 +66,8 @@ describe('rng', () => {
   })
 })
 
-describe('configuration limits', () => {
-  it('accepts only session durations between 60 and 180 seconds', () => {
-    expect(isValidSessionSeconds(59)).toBe(false)
-    expect(isValidSessionSeconds(60)).toBe(true)
-    expect(isValidSessionSeconds(180)).toBe(true)
-    expect(isValidSessionSeconds(181)).toBe(false)
-  })
-
-  it('rejects non-positive spawn intervals', () => {
-    expect(isValidSpawnInterval(0)).toBe(false)
-    expect(isValidSpawnInterval(-2)).toBe(false)
-    expect(isValidSpawnInterval(3)).toBe(true)
-  })
-
-  it('changes the fingerprint when balancing changes', () => {
+describe('configuration fingerprint', () => {
+  it('changes when balancing changes', () => {
     const a = buildConfig({ sessionSeconds: 120, spawnIntervalSeconds: 3 })
     const b = buildConfig({ sessionSeconds: 120, spawnIntervalSeconds: 4 })
     expect(configFingerprint(a)).not.toBe(configFingerprint(b))
@@ -111,8 +97,6 @@ describe('frame-rate independence', () => {
     for (let i = 0; i < 30; i++) slowRunner.advance(slow, 1 / 30, input)
     for (let i = 0; i < 144; i++) fastRunner.advance(fast, 1 / 144, input)
 
-    // The accumulator remainder differs between the two frame budgets, so the
-    // positions may lag by at most the distance covered in a single fixed step.
     const tolerance = DEFAULT_GAME_CONFIG.player.speed * STEP
     expect(Math.abs(slow.player.x - fast.player.x)).toBeLessThan(tolerance)
     expect(Math.abs(slow.player.y - fast.player.y)).toBeLessThan(tolerance)
@@ -130,7 +114,6 @@ describe('frame-rate independence', () => {
     const runner = new FixedStepRunner()
     let steps = 0
     let shots = 0
-    // One 0.2 s frame runs 12 steps; the front gun (0.45 s cooldown) fires on the first.
     runner.advance(sim, 0.2, intent({ fireFront: true }), (s) => {
       steps++
       for (const event of s.events) if (event.type === 'shot') shots++
@@ -175,8 +158,8 @@ describe('player movement', () => {
 
   it('pushes a ship that starts inside an island out within one step', () => {
     for (const [x, y] of [
-      [800 - 80 - 10, 450], // overlapping the rim of the central circular island
-      [200, 660], // centre inside the bottom-left rectangular island
+      [800 - 80 - 10, 450],
+      [200, 660],
     ] as const) {
       const sim = makeSim(peacefulConfig(120))
       sim.player.x = x
@@ -217,7 +200,6 @@ describe('pointer steering', () => {
 
   it('turns toward the pointer at the turn rate, then holds that heading', () => {
     const sim = openWaterSim()
-    // A point straight "down" from the ship: a quarter turn away.
     const toward = intent({ steerTo: true, steerX: 1000, steerY: 700 })
     const perStep = sim.config.player.turnRate * STEP
 
@@ -233,7 +215,6 @@ describe('pointer steering', () => {
     const target = { steerTo: true, steerX: 1300, steerY: 600 }
     run(sim, 3, intent({ ...target, throttle: 1 }))
     const bearing = Math.atan2(target.steerY - sim.player.y, target.steerX - sim.player.x)
-    // Having reached the point, it keeps circling it rather than holding the old bearing.
     expect(Math.abs(angleDelta(sim.player.angle, bearing))).toBeLessThan(Math.PI / 2)
   })
 
@@ -251,8 +232,6 @@ describe('pointer steering', () => {
 })
 
 describe('island contact', () => {
-  // The central island of the default arena: a circle at (800, 450), radius 80, centred
-  // vertically, so the arena is mirror-symmetric across its horizontal axis.
   const island = { x: 800, y: 450, radius: 80 }
   const LEAD_IN = 120
 
@@ -299,7 +278,6 @@ describe('island contact', () => {
   })
 
   it('stops a ship driven head-on into a flat rectangle face', () => {
-    // Bottom-left rectangle (180, 640, 260 × 140): its top face is the line y = 640.
     const sim = makeSim(peacefulConfig(120))
     sim.player.x = 310
     sim.player.y = 640 - sim.player.radius - 100
@@ -330,7 +308,6 @@ describe('island contact', () => {
     run(up, 1.2, input)
     run(down, 1.2, input)
 
-    // Mirrored approaches across the island's horizontal axis give mirrored slides.
     expect(up.player.x).toBeCloseTo(down.player.x, 6)
     expect(up.player.y - island.y).toBeCloseTo(-(down.player.y - island.y), 6)
     expect(up.player.y).toBeLessThan(island.y)
@@ -354,7 +331,6 @@ describe('island contact', () => {
 })
 
 describe('enemy obstacle avoidance', () => {
-  // The central island (800, 450, radius 80) sits exactly between the enemy and the player.
   const PLAYER = { x: 1010, y: 450 }
 
   function behindIsland(kind: 'chaser' | 'shooter', enemyX: number, avoidance = DEFAULT_GAME_CONFIG.avoidance) {
@@ -450,8 +426,6 @@ describe('weapons', () => {
     const cooldown = DEFAULT_GAME_CONFIG.player.frontWeapon.cooldown
     const window = 5
     const shots = countShots(sim, window, intent({ fireFront: true }))
-    // Cooldowns are quantised to the fixed step, so the count may fall one short
-    // of the continuous-time ideal but must never exceed it.
     const ideal = Math.floor(window / cooldown) + 1
     expect(shots).toBeLessThanOrEqual(ideal)
     expect(shots).toBeGreaterThanOrEqual(ideal - 1)
@@ -675,6 +649,18 @@ describe('enemy behaviour', () => {
       expect(sim.player.speed).toBeGreaterThanOrEqual(0)
       for (const enemy of sim.enemies) expect(enemy.speed).toBeGreaterThanOrEqual(0)
     }
+  })
+
+  it('keeps a Shooter from firing while its bow points away from the player', () => {
+    const sim = makeSim(peacefulConfig(120))
+    const shooter = spawnEnemyAhead(sim, 'shooter', DEFAULT_GAME_CONFIG.shooter.attackRange - 50)
+    shooter.angle += Math.PI
+    shooter.prevAngle = shooter.angle
+    sim.step(STEP, NEUTRAL_INTENT)
+    expect(sim.projectiles.filter((p) => p.faction === 'enemy')).toHaveLength(0)
+
+    run(sim, 2)
+    expect(sim.projectiles.filter((p) => p.faction === 'enemy').length).toBeGreaterThan(0)
   })
 
   it('makes a Shooter fire once inside range', () => {

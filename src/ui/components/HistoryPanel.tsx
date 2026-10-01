@@ -41,7 +41,6 @@ export function HistoryPanel() {
               <tbody>
                 {data.items.map((match, index) => {
                   const played = formatPlayedAt(match.endedAt)
-                  // The newest battle stands out, as in the sample.
                   const latest = data.page === 1 && index === 0
                   return (
                     <tr key={match.matchId} className={latest ? 'is-highlighted' : undefined}>

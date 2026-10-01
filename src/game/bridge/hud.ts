@@ -55,7 +55,6 @@ export class HudPublisher {
       this.maxHp = s.playerMaxHp
       const ratio = s.playerMaxHp > 0 ? s.playerHp / s.playerMaxHp : 0
       this.el.hp.textContent = `${Math.ceil(s.playerHp)} / ${s.playerMaxHp}`
-      // The fill art is clipped, not scaled, so its rounded ends keep their shape.
       this.el.hpFill.style.setProperty('--hp', String(ratio))
       this.el.hpFill.dataset.level = ratio > 0.5 ? 'high' : ratio > 0.25 ? 'mid' : 'low'
     }
@@ -65,7 +64,6 @@ export class HudPublisher {
       this.el.enemies.textContent = String(s.enemyCount)
     }
 
-    // A polite live region: it only changes on phase transitions, never per frame.
     const status = statusText(s)
     if (status !== this.status) {
       this.status = status

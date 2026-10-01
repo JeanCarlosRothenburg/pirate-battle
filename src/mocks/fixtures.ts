@@ -9,7 +9,6 @@ const CAPTAINS = [
   'Ching Shih', 'Edward Low', 'Stede Bonnet', 'Sam Bellamy', 'Ned England', 'Jean Lafitte',
 ] as const
 
-/** The configuration most fixture matches were played with: the game's defaults. */
 export const DEFAULT_FINGERPRINT = configFingerprint(gameConfigFor(DEFAULT_OPTIONS))
 
 const FIXTURE_CONFIGS: readonly PlayerOptions[] = [

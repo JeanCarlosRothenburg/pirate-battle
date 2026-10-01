@@ -2,7 +2,6 @@ import { Container, Sprite } from 'pixi.js'
 import type { Texture } from 'pixi.js'
 
 export interface EffectSpec {
-  /** Played in order across the effect's life; a single texture stays for its whole life. */
   readonly frames: readonly Texture[]
   readonly x: number
   readonly y: number
@@ -114,7 +113,6 @@ export class EffectLayer {
   }
 
   private pickSlot(): Slot | undefined {
-    // Prefer a free slot; otherwise recycle round-robin, which is roughly the oldest.
     for (let i = 0; i < this.slots.length; i++) {
       const index = (this.next + i) % this.slots.length
       const slot = this.slots[index]

@@ -25,7 +25,6 @@ export function ResultScreen() {
         <h1 id="result-title" ref={heading} tabIndex={-1} className="result-title">
           Battle complete
         </h1>
-        {/* One sentence for screen readers: "24 points · played for 02:00 · Time up". */}
         <p className="result-summary">
           <span className="result-score">{result.score}</span>
           <span className="result-details">

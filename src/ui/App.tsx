@@ -1,6 +1,5 @@
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { useAppStore } from './appStore'
-import { GameScreen } from './screens/GameScreen'
 import { MainMenu } from './screens/MainMenu'
 import { OptionsScreen } from './screens/OptionsScreen'
 import { RecordsScreen } from './screens/RecordsScreen'
@@ -8,6 +7,12 @@ import { ResultScreen } from './screens/ResultScreen'
 import { SubmissionManager } from './SubmissionManager'
 import { preloadUiSounds } from './uiSounds'
 
+const GameScreen = lazy(() => import('./screens/GameScreen').then((module) => ({ default: module.GameScreen })))
+
+/**
+ * The app shell: background match registration plus the current screen. The match screen,
+ * which pulls in PixiJS, loads on demand, so the menus never wait for the renderer.
+ */
 export function App() {
   const screen = useAppStore((s) => s.screen)
   const match = useAppStore((s) => s.match)
@@ -16,7 +21,6 @@ export function App() {
 
   return (
     <>
-      {/* Registers finished matches in the background, whatever screen is showing. */}
       <SubmissionManager />
       {renderScreen()}
     </>
@@ -33,8 +37,23 @@ export function App() {
       case 'result':
         return <ResultScreen />
       case 'game':
-        // Keyed by match so every match mounts a fresh game and the last one is torn down.
-        return match === null ? <MainMenu /> : <GameScreen key={match.matchId} match={match} />
+        return match === null ? (
+          <MainMenu />
+        ) : (
+          <Suspense fallback={<LoadingScreen />}>
+            <GameScreen key={match.matchId} match={match} />
+          </Suspense>
+        )
     }
   }
+}
+
+function LoadingScreen() {
+  return (
+    <div className="loading" role="status">
+      <div className="loading-panel">
+        <p className="loading-title">Loading the game…</p>
+      </div>
+    </div>
+  )
 }

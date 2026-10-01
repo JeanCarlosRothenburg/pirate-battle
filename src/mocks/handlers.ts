@@ -6,14 +6,46 @@ import { createRng } from '../game/sim/rng'
 import type { Rng } from '../game/sim/rng'
 import { MockDatabase } from './database'
 import { DEFAULT_FINGERPRINT, fixtureRecords } from './fixtures'
-import type { ScenarioSettings } from './scenarios'
+import type { ScenarioId, ScenarioSettings } from './scenarios'
 
 export const API_BASE = '/api'
 
-/** Longer than the client timeout, so a "timed out" request really times out. */
 export const BEYOND_CLIENT_TIMEOUT_MS = 8000
 
 type Endpoint = 'ranking' | 'history' | 'register'
+
+interface ScenarioRequest {
+  readonly endpoint: Endpoint
+  readonly index: number
+  readonly rng: Rng
+}
+
+type ScenarioBehaviour = (request: ScenarioRequest) => Promise<Response | null>
+
+const pass: ScenarioBehaviour = async () => null
+const waitFor = (ms: (request: ScenarioRequest) => number): ScenarioBehaviour => async (request) => {
+  await delay(ms(request))
+  return null
+}
+const fail = (status: number, error: string, only?: Endpoint): ScenarioBehaviour => async ({ endpoint }) =>
+  only === undefined || endpoint === only ? HttpResponse.json({ error }, { status }) : null
+
+const SCENARIO_BEHAVIOUR: Readonly<Record<ScenarioId, ScenarioBehaviour>> = {
+  success: pass,
+  empty: pass,
+  'many-pages': pass,
+  slow: waitFor(() => 2500),
+  'variable-latency': waitFor(({ rng }) => Math.round(rng.range(100, 2500))),
+  'out-of-order': waitFor(({ index }) => (index % 2 === 0 ? 1800 : 150)),
+  timeout: waitFor(() => BEYOND_CLIENT_TIMEOUT_MS),
+  'connection-failure': async () => HttpResponse.error(),
+  'http-4xx': fail(400, 'Bad request (simulated)'),
+  'http-5xx': fail(503, 'Service unavailable (simulated)'),
+  'ranking-failure': fail(500, 'Ranking unavailable (simulated)', 'ranking'),
+  'history-failure': fail(500, 'History unavailable (simulated)', 'history'),
+  'register-timeout': pass,
+  'register-unavailable': fail(503, 'Registration unavailable (simulated)', 'register'),
+}
 
 export interface MockApi {
   readonly handlers: readonly HttpHandler[]
@@ -27,12 +59,19 @@ export interface MockApi {
 
 /**
  * Builds the mock ranking and history API. The same handlers serve development, the
- * published demo (through the service worker) and the tests (through `msw/node`).
+ * published demo (through the service worker) and the tests (through `msw/node`); `base` is
+ * relative in the browser and absolute under Node.
+ *
+ * Each network scenario is a behaviour applied to every request (Strategy): it resolves to
+ * a failure response, or lets the request through after any extra delay, on top of a small
+ * seeded base latency. `out-of-order` makes every other request slow, so a later request
+ * overtakes an earlier one. `register-timeout` lives in the PUT handler: the record is
+ * committed and only the first response is delayed past the client timeout, so a retry
+ * recovers it without a duplicate.
  */
 export function createMockApi(
   storage: Storage | null,
   initial: ScenarioSettings,
-  /** Relative in the browser (resolved against the page); absolute under Node. */
   base = API_BASE,
 ): MockApi {
   let settings = initial
@@ -44,42 +83,11 @@ export function createMockApi(
   const manyFixtures = fixtureRecords(240)
   const db = new MockDatabase(() => (settings.scenario === 'many-pages' ? manyFixtures : normalFixtures), storage)
 
-  /** Latency and failures for one request, decided by the active scenario. */
+  /** Applies the active scenario to one request, after the seeded base latency every request gets. */
   async function condition(endpoint: Endpoint): Promise<Response | null> {
-    const n = requestCount++
-    switch (settings.scenario) {
-      case 'slow':
-        await delay(2500)
-        break
-      case 'variable-latency':
-        await delay(Math.round(rng.range(100, 2500)))
-        break
-      case 'out-of-order':
-        // Every other request is slow, so a later request overtakes an earlier one.
-        await delay(n % 2 === 0 ? 1800 : 150)
-        break
-      case 'timeout':
-        await delay(BEYOND_CLIENT_TIMEOUT_MS)
-        break
-      case 'connection-failure':
-        return HttpResponse.error()
-      case 'http-4xx':
-        return HttpResponse.json({ error: 'Bad request (simulated)' }, { status: 400 })
-      case 'http-5xx':
-        return HttpResponse.json({ error: 'Service unavailable (simulated)' }, { status: 503 })
-      case 'ranking-failure':
-        if (endpoint === 'ranking') return HttpResponse.json({ error: 'Ranking unavailable (simulated)' }, { status: 500 })
-        break
-      case 'history-failure':
-        if (endpoint === 'history') return HttpResponse.json({ error: 'History unavailable (simulated)' }, { status: 500 })
-        break
-      case 'register-unavailable':
-        if (endpoint === 'register') return HttpResponse.json({ error: 'Registration unavailable (simulated)' }, { status: 503 })
-        break
-      default:
-        break
-    }
-    // Every scenario gets a small, seeded base latency, like a real network.
+    const request: ScenarioRequest = { endpoint, index: requestCount++, rng }
+    const failure = await SCENARIO_BEHAVIOUR[settings.scenario](request)
+    if (failure !== null) return failure
     await delay(Math.round(rng.range(60, 180)))
     return null
   }
@@ -117,8 +125,6 @@ export function createMockApi(
       const record: MatchRecord = parsed.data
       const result = db.register(record)
 
-      // The record is committed above; only the first response is lost, so a retry
-      // recovers it without creating a duplicate.
       const attempt = (registerAttempts.get(record.matchId) ?? 0) + 1
       registerAttempts.set(record.matchId, attempt)
       if (settings.scenario === 'register-timeout' && attempt === 1) await delay(BEYOND_CLIENT_TIMEOUT_MS)

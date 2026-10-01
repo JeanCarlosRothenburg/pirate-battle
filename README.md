@@ -1,73 +1,90 @@
 # Pirate Battle
 
-Top-down 2D naval shooter built with React, TypeScript, PixiJS, TanStack Query, Axios, MSW and Playwright.
+Top-down 2D naval shooter: sail between islands, fight enemy ships and score points before
+the match ends. Built with React, TypeScript (strict), PixiJS, TanStack Query, Axios, MSW and
+Playwright.
 
-## Status
-
-The deterministic simulation core is implemented and covered by unit tests. Rendering,
-The Playwright suite, the performance report and the deployment are the next stages.
-
-| Area | State |
-| --- | --- |
-| Typed game configuration and option limits | done |
-| Seeded RNG, injectable clock, fixed-step loop | done |
-| Player movement, rotation, arena and island collision | done |
-| Frontal and broadside weapons, cooldowns, projectile lifetime | done |
-| Chaser and Shooter behaviour, seeded spawner | done |
-| Match rules: scoring, time out, death, pause, restart | done |
-| PixiJS renderer, provided assets, effects and sounds | done |
-| Asset loading with progress, failure and retry | done |
-| Menu, Options, Result and Pause screens, persistence, keyboard accessibility | done |
-| Touch controls and mobile orientation (landscape) | done |
-| Ranking and Match History: Axios, TanStack Query, MSW scenarios | done |
-| Playwright E2E and visual regression | pending |
-| Performance profiling report | pending |
+- **Live demo:** _added after the first Vercel deployment (see [Deployment](#deployment))._
+- **Architecture and decisions:** [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Test report:** `reports/e2e/index.html` · **Profiling report:** [reports/performance/REPORT.md](reports/performance/REPORT.md)
 
 ## Setup
+
+Requirements: Node.js 20 or newer. Profiling also needs Google Chrome installed.
 
 ```bash
 npm install
 npm run dev
 ```
 
+**Environment variables:** none. The ranking and match history run on a mock API (MSW)
+inside the app, in development and in the published build alike.
+
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Development server |
-| `npm run build` | Type-check and produce the optimised build |
+| `npm run build` | Type-check and produce the optimised build in `dist/` |
 | `npm run preview` | Serve the production build |
-| `npm run typecheck` | Strict TypeScript check |
 | `npm run lint` | ESLint |
-| `npm test` | Unit tests (simulation, input, HUD, storage, API against the MSW handlers) |
-| `npm run e2e` | Playwright suite |
+| `npm run typecheck` | Strict TypeScript check |
+| `npm test` | Unit tests (Vitest) |
+| `npm run test:watch` | Unit tests in watch mode |
+| `npm run e2e:install` | Download Playwright's Chromium (once) |
+| `npm run e2e` | Playwright suite on desktop and mobile Chromium, with the HTML report in `reports/e2e/` |
+| `npm run e2e:ui` | Playwright UI mode |
+| `npm run e2e:update-snapshots` | Regenerate the visual regression baselines |
+| `npm run perf` | Performance profile of the optimised build (writes `reports/performance/profile.json`) |
+
+The E2E and profiling suites build the app and serve it with `vite preview` on their own.
 
 ## Controls
 
-| Key | Action |
+| Input | Action |
 | --- | --- |
 | Mouse | Steer: the ship turns toward the pointer, as in slither.io |
-| W or ↑ | Sail forward |
+| W or ↑ | Sail forward (ships only sail forward) |
 | A / D or ← / → | Turn; overrides the mouse until it moves again |
-| Space | Bow gun |
-| Q / E | Port / starboard broadside |
-| P or Esc | Pause (also the on-screen button); Esc, P or Resume continue |
-| M | Mute |
-| Touch | On-screen buttons for sailing, turning and the three guns; drag on the sea to steer |
+| Space | Bow gun (one ball) |
+| Q / E | Port / starboard broadside (three parallel balls) |
+| P or Esc | Pause (also the on-screen button); Esc, P or Resume continue (in landscape on touch devices) |
+| M | Mute (also in the pause menu) |
+| Touch | On-screen buttons to sail, turn and fire, usable together; drag on the sea to steer |
 
-On touch devices matches are played in **landscape**. Turning the device upright pauses the
-match, and it resumes once the device is back in landscape and the player chooses Resume.
+Sailing and firing work at the same time. The match also pauses when the window loses focus
+or the tab is hidden, and only resumes on the player's action. Game keys are only captured
+while a match runs. On touch devices matches are played in **landscape**: turning the device
+upright pauses the match until it is turned back.
 
-The match also pauses when the window loses focus or the tab is hidden. Game keys are only
-captured while a match is running; on menus and in the pause dialog every key works as usual.
+## Gameplay configuration
+
+All balancing lives in `src/game/config/gameConfig.ts` (session length, spawn interval and
+mix, health, speeds, turn rates, damage, projectile speed, range and lifetime, cooldowns,
+Shooter range, hull friction, enemy avoidance). Systems read the config, so tuning never
+changes game logic. The values and their reasoning are in
+[ARCHITECTURE.md](ARCHITECTURE.md#balancing-decisions).
+
+Options exposed to the player (Options screen, saved in the browser):
+
+| Option | Minimum | Maximum | Default |
+| --- | --- | --- | --- |
+| Game session time | 60 s | 180 s (whole seconds) | 120 s |
+| Enemy spawn time | 0.5 s | 10 s (must be positive) | 3 s |
+| Player name | 1 character | 16 characters | Captain |
+
+Each match freezes the options when it starts; later changes apply to the next match. The
+player name is not one of the brief's two options; it is there because the ranking must
+identify players.
 
 ## Screens and persistence
 
-Main menu (Play, Options, control instructions, and Ranking and Match History buttons, as in
-`assets/sample_menu.png`), Options, the Captain's Log (ranking and match history as two tabs,
-five rows per page, as in `sample_ranking.png` and `sample_history.png`), the match with its
-pause dialog, and the result screen (as in `sample_result.png`, plus the match's registration
-state, which the brief requires). Saved in `localStorage` under versioned keys:
+Main menu (Play, Options, control instructions, Ranking and Match History buttons), Options,
+the Captain's Log (ranking and history tabs), the match with its pause menu, and the result
+screen. They follow the samples in `assets/`, plus what the brief requires and the samples
+do not show (control instructions on the menu, registration state on the result screen).
+
+Saved in `localStorage` under versioned keys:
 
 | Key | Content |
 | --- | --- |
@@ -75,26 +92,18 @@ state, which the brief requires). Saved in `localStorage` under versioned keys:
 | `pirate-battle:player:v1` | Stable player id |
 | `pirate-battle:last-result:v1` | Last completed match |
 | `pirate-battle:view:v1` | Whether the result screen was open, so it survives a refresh |
-| `pirate-battle:pending-matches:v1` | Completed matches the server has not confirmed yet |
+| `pirate-battle:pending-matches:v1` | Completed matches not yet confirmed by the server |
 | `pirate-battle:mock-db:v1` | Mock API: matches confirmed by the simulated server |
 | `pirate-battle:mock-scenario:v1` | Mock API: the selected network scenario and seed |
 
-Reloading or leaving during a match abandons it: nothing is recorded. Each match uses the
-options saved when it started; later changes apply to the next match.
+Reloading or leaving during a match abandons it, and it is not recorded.
 
-## Assets
+## Simulated network
 
-The challenge assets live in `assets/` unmodified; see `assets/SOURCES.md` for their origin
-and the conversions applied at load time.
-
-## Ranking, history and simulated network
-
-The ranking and match history come from a mock REST API (MSW) that runs in development and
-in the published build alike; there is no real backend and no environment variable to set.
-
-Select a network scenario from **Simulated network** in the Captain's Log, or with
+Select a network scenario under **Simulated network** in the Captain's Log, or with
 `?scenario=<id>&seed=<n>` in the URL (remembered until changed). **Restore initial state**
-clears the simulated server's records and returns to `success`.
+clears the simulated server's records and returns to `success`. Latency and randomness are
+seeded, so a scenario behaves the same on every run.
 
 | Scenario | What it simulates |
 | --- | --- |
@@ -111,27 +120,46 @@ clears the simulated server's records and returns to `success`.
 | `register-timeout` | A registration is saved, but its first response times out |
 | `register-unavailable` | Registrations fail with 503 until the scenario changes |
 
-To reproduce a failure end to end: pick `register-unavailable`, finish a match, and watch
-the result screen report "Not registered" with a Retry; refresh to see the match still
-pending; switch back to `success` and retry to see it registered in both tabs.
+### Reproducing failures
 
-## Gameplay configuration
+- **Registration during an outage:** choose `register-unavailable`, finish a match, and the
+  result screen reports "Not registered" with a Retry. Refresh: the match is still pending.
+  Switch back to `success` and press Retry: it appears once in both tabs.
+- **Timeout after the server saved the match:** choose `register-timeout` and finish a
+  match. The first response times out, the automatic retry recovers the existing record,
+  and the history shows it once.
+- **Failing lists:** choose `ranking-failure`, `http-5xx` or `timeout` and open the Captain's
+  Log: the error appears with Try again, and the game stays playable.
+- **Stale responses:** choose `out-of-order` and page quickly; the page shown always matches
+  the page selected.
+- **Asset loading failure:** in the browser's DevTools, block a request such as
+  `tiles_sheet*.png` (Network panel, "Block request URL") and press Play: the error and a
+  Retry appear; unblock and retry to start the match.
 
-All balancing lives in `src/game/config/gameConfig.ts`. Systems read values from the
-config object, so tuning never requires changes to game logic.
+## Testing
 
-Player-facing options and their documented bounds:
+- **Unit tests** (`npm test`) cover the rules, collisions, avoidance, inputs, HUD, storage,
+  stores and the API client against the real MSW handlers.
+- **End-to-end tests** (`npm run e2e`) cover the twelve flows of the brief, with visual
+  regression of the menu, a stable arena and the result screen, on desktop Chromium and a
+  Pixel 7 in landscape. They run against the production build with seeded matches and a
+  controllable clock; failures keep a trace (`npx playwright show-trace <trace.zip>`).
+- **Test instrumentation:** `?testHooks` exposes `window.__pirateBattle` to observe the match
+  and control its clock, `?frozenClock` starts each match with the clock stopped, and
+  `?matchSeed=<n>` fixes the seed. All three are inert in normal play.
+- Visual baselines in `e2e/13-visual.spec.ts-snapshots/` are per platform; regenerate them
+  with `npm run e2e:update-snapshots` on a new one.
 
-| Option | Minimum | Maximum |
-| --- | --- | --- |
-| Game session time | 60 s | 180 s |
-| Enemy spawn time | 0.5 s | 10 s |
+## Deployment
 
-The spawn interval must be positive. Each match freezes a snapshot of the configuration
-at start, so later edits only affect subsequent matches.
+The app is a static build, mocks included, so any static host works. On
+[Vercel](https://vercel.com/): import the GitHub repository and keep the detected settings
+(framework Vite, build `npm run build`, output `dist`); `vercel.json` adds the cache headers.
+Every push to `main` then redeploys. The game works when the published URL is opened or
+reloaded, mocks included.
 
-## Determinism
+## Assets
 
-Every match runs from a numeric seed. The simulation contains no `Math.random` and no
-direct clock reads, so a seed plus an input sequence reproduces a match exactly. This is
-what makes the Playwright scenarios repeatable.
+The challenge assets live unmodified in `assets/`; `assets/SOURCES.md` records their origin
+and the conversions applied at load time. The pack ships without a licence file; it is used
+under the terms of the challenge.

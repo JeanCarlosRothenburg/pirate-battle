@@ -21,7 +21,7 @@ challenge repository `game-developer-challenge-main`, which the challenge organi
 | `vector/` | SVG and SWF vector sources of the ships and tiles |
 | `sounds/` | WAV sound effects and ambience loops |
 | `sample*.png`, `preview.png` | Reference screenshots supplied with the brief; not used at runtime |
-| `ui_scene_background.png` | Menu background |
+| `ui_scene_background.png` | Menu background scene |
 | `logo_jungle_gaming.svg` | Challenge organiser's logo; not used at runtime |
 
 ## Licence
@@ -40,7 +40,12 @@ No file here is modified. Conversions happen at load time in code:
 | `spritesheet/ships_miscellaneous_sheet.xml` | Starling XML parsed into Pixi spritesheet data | `src/game/assets/textureAtlasXml.ts` |
 | `tilesheet/tiles_sheet(_retina).png` | Sliced into 64 × 64 tiles by grid (`tilesheets.txt`) | `src/game/assets/gameAssets.ts` |
 | `enemy_health_fill_*` (UI atlas) | Clipped into 20 precomputed widths for partial health | `src/game/assets/gameAssets.ts` |
-| `png/*/ui/hud`, `png/*/ui/controls` | Used as CSS backgrounds for the HUD, 1× / 2× via `image-set` | `src/ui/styles.css` |
+| `png/*/tiles/tile_73`, `tile_18`, `tile_40` | Seamless water, sand and grass tiles repeated as patterns over the sea and the island shapes | `src/game/assets/manifest.ts`, `src/game/render/arenaBackground.ts` |
+| `png/*/ui/hud`, `png/*/ui/controls` | CSS backgrounds for the HUD and the touch buttons (`button_round_*`, `icon_*`), 1× / 2× via `image-set` | `src/ui/styles.css` |
+| `png/*/ui/menu` | Menu panel, primary and secondary buttons and the title, drawn as CSS nine-slices | `src/ui/styles.css` |
+| `ui_scene_background.png` | Background of the menus and loading screen | `src/ui/styles.css` |
+| `png/default/ships/ship_2.png` | Ship illustration on the main menu | `src/ui/screens/MainMenu.tsx` |
+| `sounds/*.wav` | Game sounds loaded with the first match; `ui_*` sounds for menu buttons | `src/game/assets/manifest.ts`, `src/game/bridge/gameAudio.ts`, `src/ui/uiSounds.ts` |
 | `png/default/ships/ship_5.png` | Page favicon | `index.html` |
 
 The "retina" ships atlas has the same pixel size as the default one, so only the default is

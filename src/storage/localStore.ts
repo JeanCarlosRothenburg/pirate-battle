@@ -1,6 +1,5 @@
 import type { ZodType } from 'zod'
 
-/** Every key this app writes, versioned so a schema change can move to a new key. */
 export const STORAGE_KEYS = {
   options: 'pirate-battle:options:v1',
   player: 'pirate-battle:player:v1',
@@ -10,7 +9,8 @@ export const STORAGE_KEYS = {
 } as const
 
 /**
- * Reads and validates a stored JSON value. Missing, unreadable or invalid data (older
+ * Reads and validates a stored JSON value. Every key is versioned, so a schema change moves
+ * to a new key. Missing, unreadable or invalid data (older
  * versions, manual edits, private browsing without storage) yields `null` instead of
  * breaking the app.
  */
@@ -37,11 +37,13 @@ export function writeStored(storage: Storage | null, key: string, value: unknown
   }
 }
 
-export function removeStored(storage: Storage | null, key: string): void {
+/** Removes a stored value. Returns false when storage is unavailable, where there is nothing to remove. */
+export function removeStored(storage: Storage | null, key: string): boolean {
   try {
     storage?.removeItem(key)
+    return true
   } catch {
-    // Nothing to clean up when storage is unavailable.
+    return false
   }
 }
 

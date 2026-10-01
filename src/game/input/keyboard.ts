@@ -4,7 +4,6 @@ import type { MutableIntent } from '../sim/types'
 type HeldAction = 'forward' | 'left' | 'right' | 'fireFront' | 'fireLeft' | 'fireRight'
 export type InputCommand = 'pause' | 'toggleMute'
 
-/** Bound by physical key position (`KeyboardEvent.code`), so WASD works on any layout. */
 const HELD_BINDINGS: Readonly<Record<string, HeldAction>> = {
   KeyW: 'forward',
   ArrowUp: 'forward',
@@ -24,7 +23,8 @@ const COMMAND_BINDINGS: Readonly<Record<string, InputCommand>> = {
 }
 
 /**
- * Tracks held keys and folds them into an `InputIntent`. `read()` reuses one object,
+ * Tracks held keys and folds them into an `InputIntent`. Keys are bound by physical
+ * position (`KeyboardEvent.code`), so WASD works on any layout. `read()` reuses one object,
  * so polling it every frame allocates nothing.
  *
  * Game keys are only captured while `enabled`: while a match is paused, over or not yet

@@ -2,9 +2,7 @@ import type { ArenaConfig, AvoidanceConfig, IslandShape } from '../config/gameCo
 import { TAU } from '../sim/mathUtils'
 
 export interface SteeringResult {
-  /** Heading to steer toward, in radians. */
   angle: number
-  /** Danger (0–1) along the chosen heading: 0 is clear, 1 is an obstacle at point blank. */
   danger: number
 }
 
@@ -44,13 +42,16 @@ export class ContextSteering {
     }
   }
 
+  /**
+   * Returns the heading to take toward `desiredAngle` and the danger along it. Obstacles
+   * beyond `goalDistance` do not block the direct line.
+   */
   steer(
     x: number,
     y: number,
     heading: number,
     radius: number,
     desiredAngle: number,
-    /** How far away the goal is; obstacles beyond it do not block the direct line. */
     goalDistance: number,
     arena: ArenaConfig,
   ): SteeringResult {
@@ -60,7 +61,6 @@ export class ContextSteering {
     const wantX = Math.cos(desiredAngle)
     const wantY = Math.sin(desiredAngle)
 
-    // Clear straight line: nothing to arbitrate.
     const direct = rayDanger(x, y, wantX, wantY, reach, Math.min(cfg.lookahead, goalDistance), arena)
     if (direct === 0) {
       result.angle = desiredAngle
@@ -82,7 +82,6 @@ export class ContextSteering {
       if (danger < lowest) lowest = danger
     }
 
-    // Mask every heading noticeably more dangerous than the safest one.
     let best = -1
     let bestInterest = -1
     for (let i = 0; i < slots; i++) {
@@ -94,7 +93,6 @@ export class ContextSteering {
       }
     }
 
-    // Every safe heading points away from the goal: take the safest heading.
     if (bestInterest <= 0) {
       for (let i = 0; i < slots; i++) if ((this.danger[i] ?? 1) === lowest) best = i
     }
@@ -159,7 +157,6 @@ export function rayToIsland(
     if (b >= 0 || disc < 0) return Number.POSITIVE_INFINITY
     return -b - Math.sqrt(disc)
   }
-  // Slab test against the rectangle grown by `reach` (slightly conservative at the corners).
   const minX = island.x - reach
   const maxX = island.x + island.width + reach
   const minY = island.y - reach

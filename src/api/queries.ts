@@ -18,7 +18,6 @@ export function createQueryClient(): QueryClient {
       queries: {
         retry,
         retryDelay,
-        // Cached pages show instantly when revisited, then refresh in the background.
         staleTime: 10_000,
         gcTime: 5 * 60_000,
         refetchOnWindowFocus: true,

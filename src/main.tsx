@@ -6,19 +6,21 @@ import { startMockApi } from './mocks/browser'
 import { App } from './ui/App'
 import './ui/styles.css'
 
-const container = document.getElementById('root')
-if (container === null) throw new Error('Missing #root element')
-
-const queryClient = createQueryClient()
-
-// The mock API must be listening before the first request; the game itself never waits on
-// it, and a failure to start leaves the record panels in their error state.
-void startMockApi().finally(() => {
+/**
+ * Starts the mock API, then renders the app. The mocks must listen before the first request;
+ * if they fail to start, the app still renders and only the record panels report errors.
+ */
+async function bootstrap(container: HTMLElement): Promise<void> {
+  await startMockApi().catch(() => null)
   createRoot(container).render(
     <StrictMode>
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={createQueryClient()}>
         <App />
       </QueryClientProvider>
     </StrictMode>,
   )
-})
+}
+
+const root = document.getElementById('root')
+if (root === null) throw new Error('Missing #root element')
+void bootstrap(root)

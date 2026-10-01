@@ -6,10 +6,6 @@ import { STORAGE_KEYS, readStored, writeStored } from './localStore'
 
 export const PLAYER_NAME_MAX = 16
 
-/**
- * Player options. The brief requires the two gameplay options; the player name is added
- * because the ranking must identify players.
- */
 export const optionsSchema = z.object({
   playerName: z
     .string()
@@ -36,6 +32,11 @@ export const DEFAULT_OPTIONS: PlayerOptions = {
   spawnIntervalSeconds: DEFAULT_GAME_CONFIG.spawn.intervalSeconds,
 }
 
+/**
+ * The saved player options, or the defaults. The brief requires the two gameplay options
+ * (session time and spawn interval, validated against their documented limits); the player
+ * name is added because the ranking must identify players.
+ */
 export function loadOptions(storage: Storage | null): PlayerOptions {
   return readStored(storage, STORAGE_KEYS.options, optionsSchema) ?? DEFAULT_OPTIONS
 }

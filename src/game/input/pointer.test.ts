@@ -8,7 +8,6 @@ function move(x: number, y: number): Event {
 }
 
 describe('PointerSteering', () => {
-  // 1:1 mapping between screen and arena keeps the numbers readable.
   const box = fitLetterbox(1600, 900, 1600, 900)
   let surface: EventTarget
   let pointer: PointerSteering

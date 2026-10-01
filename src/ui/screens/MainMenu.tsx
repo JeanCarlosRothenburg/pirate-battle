@@ -37,7 +37,6 @@ export function MainMenu() {
         <img className="menu-ship" src={shipUrl} alt="" width={33} height={57} />
         <p className="menu-motto">Navigate the islands. Survive the battle.</p>
 
-        {/* Open by default: the brief requires control instructions on the main menu. */}
         <details className="menu-controls" open>
           <summary>How to play</summary>
           <ControlsHelp headingHidden />

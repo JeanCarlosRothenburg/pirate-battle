@@ -4,7 +4,6 @@ import { ZodError } from 'zod'
 import { PAGE_SIZE, historyPageSchema, rankingPageSchema, registerResponseSchema } from './contracts'
 import type { HistoryPage, MatchRecord, RankingPage, RegisterResponse } from './contracts'
 
-/** Requests slower than this fail as timeouts, which the UI reports and retries. */
 export const API_TIMEOUT_MS = 5000
 
 export interface ApiClient {

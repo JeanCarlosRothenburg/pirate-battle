@@ -96,6 +96,12 @@ describe('app store', () => {
     expect(createAppStore(storage).getState().screen).toBe('menu')
   })
 
+  it('uses the test seed for every match when one is given', () => {
+    const store = createAppStore(memoryStorage(), { hooks: true, frozenClock: false, matchSeed: 42 })
+    store.getState().play()
+    expect(store.getState().match?.seed).toBe(42)
+  })
+
   it('keeps the same player id across reloads', () => {
     const storage = memoryStorage()
     const id = createAppStore(storage).getState().playerId

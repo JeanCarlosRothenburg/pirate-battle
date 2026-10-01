@@ -11,7 +11,6 @@ const CONTROLS: readonly (readonly [string, string])[] = [
 
 interface ControlsHelpProps {
   readonly headingLevel?: 2 | 3
-  /** Keep the heading for screen readers only, when a visible label already exists. */
   readonly headingHidden?: boolean
 }
 

@@ -2,17 +2,13 @@ import { Container, FillPattern, Graphics, Sprite, TilingSprite } from 'pixi.js'
 import type { GameTextures } from '../assets/gameAssets'
 import type { ArenaConfig, IslandShape } from '../config/gameConfig'
 
-/** Tile numbers in the provided tile sheet. */
 const TILE = { palm: 71, fern: 70, sprout: 72, rock: 50, mossyRock: 66, seedlings: 87 } as const
-/** Share of the island's size covered by grass; the rest is beach. */
 const GRASS_RATIO = 0.62
-/** Small enough that the rounded art leaves only a few pixels of collision outside it. */
 const RECT_CORNER = 14
 const SAND_EDGE = 0xc49a5c
 const GRASS_EDGE = 0x4d8a36
 const SHALLOW_WIDTH = 22
 const WATER_DRIFT = { x: 7, y: 4 } as const
-/** The sea beyond the arena is dimmed slightly, so the sailing limit stays readable. */
 const OUTSIDE_DIM = { color: 0x041c2c, alpha: 0.3 } as const
 const LIMIT_LINE = { width: 3, color: 0xffffff, alpha: 0.35 } as const
 

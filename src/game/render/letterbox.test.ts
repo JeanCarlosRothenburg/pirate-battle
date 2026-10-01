@@ -2,7 +2,6 @@ import { fitLetterbox, screenToArena } from './letterbox'
 
 describe('letterbox', () => {
   it('fits the arena by its limiting side and centres the other', () => {
-    // A 1600 × 900 arena on a 1000 × 1000 screen: width-limited, bars above and below.
     const box = fitLetterbox(1000, 1000, 1600, 900)
     expect(box.scale).toBeCloseTo(0.625)
     expect(box.offsetX).toBeCloseTo(0)

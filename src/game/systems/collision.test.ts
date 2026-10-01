@@ -35,7 +35,6 @@ describe('resolveCircleMove', () => {
   })
 
   it('keeps only the tangential part of a move into a flat face', () => {
-    // Touching the rectangle's top face (y = 100) from above, moving down and right.
     const move = resolveCircleMove(200, 90, 3, 4, 10, arenaWith(rect))
     expect(move.contact).toBe(true)
     expect(move.nx).toBeCloseTo(0)
@@ -51,7 +50,6 @@ describe('resolveCircleMove', () => {
   })
 
   it('stays put when the slide would enter a second island', () => {
-    // A notch between two rectangles: sliding right along the floor runs into the wall.
     const floor: IslandShape = { kind: 'rect', x: 0, y: 100, width: 300, height: 50 }
     const wall: IslandShape = { kind: 'rect', x: 210, y: 0, width: 50, height: 100 }
     const move = resolveCircleMove(199.5, 89.5, 3, 3, 10, arenaWith(floor, wall))

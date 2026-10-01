@@ -2,13 +2,7 @@ import type { ArenaConfig, IslandShape } from '../config/gameConfig'
 import { clamp, distanceSquared } from '../sim/mathUtils'
 
 export function circleHitsIsland(x: number, y: number, radius: number, island: IslandShape): boolean {
-  if (island.kind === 'circle') {
-    const reach = radius + island.radius
-    return distanceSquared(x, y, island.x, island.y) < reach * reach
-  }
-  const nearestX = clamp(x, island.x, island.x + island.width)
-  const nearestY = clamp(y, island.y, island.y + island.height)
-  return distanceSquared(x, y, nearestX, nearestY) < radius * radius
+  return penetrationDepth(x, y, radius, island) > 0
 }
 
 export function circleHitsAnyIsland(
@@ -83,15 +77,11 @@ export function penetrationDepth(x: number, y: number, radius: number, island: I
 export interface MoveResult {
   x: number
   y: number
-  /** True when the move touched an island this step. */
   contact: boolean
-  /** Surface normal at the contact, pointing out of the island; (0, 0) without contact. */
   nx: number
   ny: number
-  /** The point where the circle touched the island surface. */
   contactX: number
   contactY: number
-  /** Length of the movement removed along the normal: how hard the ship pushed into the island. */
   impact: number
 }
 
@@ -99,14 +89,17 @@ export function createMoveResult(): MoveResult {
   return { x: 0, y: 0, contact: false, nx: 0, ny: 0, contactX: 0, contactY: 0, impact: 0 }
 }
 
-/** Clearance kept after depenetration, so the next overlap test starts in free water. */
 const SKIN = 1e-6
 const DEPENETRATION_PASSES = 3
 const ENTRY_SEARCH_STEPS = 14
 const normalScratch: SurfaceNormal = { nx: 0, ny: 0 }
 
 /**
- * Moves a circle by (dx, dy) and slides it along the first island it would enter.
+ * Moves a circle by (dx, dy) and slides it along the first island it would enter. The result
+ * holds the new position and, when the move touched an island, the surface normal (pointing
+ * out of the island), the contact point on its surface, and the impact: the length of the
+ * movement removed along the normal. Depenetration keeps a tiny skin of clearance so the
+ * next overlap test starts in free water.
  *
  * 1. A circle that starts inside an island is pushed out along the surface normal.
  * 2. The move advances to the moment it would first enter an island.
@@ -182,7 +175,7 @@ export function resolveCircleMove(
 
   const slidX = cx + (restX - nx * intoSurface) * friction
   const slidY = cy + (restY - ny * intoSurface) * friction
-  if (overlapsAnyIsland(slidX, slidY, radius, arena)) return finish(px, py, radius, arena, out)
+  if (circleHitsAnyIsland(slidX, slidY, radius, arena)) return finish(px, py, radius, arena, out)
   return finish(slidX, slidY, radius, arena, out)
 }
 
@@ -198,13 +191,6 @@ function entryTime(px: number, py: number, dx: number, dy: number, radius: numbe
   return free
 }
 
-function overlapsAnyIsland(x: number, y: number, radius: number, arena: ArenaConfig): boolean {
-  for (const island of arena.islands) {
-    if (penetrationDepth(x, y, radius, island) > 0) return true
-  }
-  return false
-}
-
 function finish(x: number, y: number, radius: number, arena: ArenaConfig, out: MoveResult): MoveResult {
   out.x = clamp(x, radius, arena.width - radius)
   out.y = clamp(y, radius, arena.height - radius)
@@ -214,7 +200,6 @@ function finish(x: number, y: number, radius: number, arena: ArenaConfig, out: M
 function normalise(dx: number, dy: number, out: SurfaceNormal): SurfaceNormal {
   const length = Math.hypot(dx, dy)
   if (length < 1e-9) {
-    // Degenerate: the point is exactly on the centre or the edge. Any unit vector will do.
     out.nx = 0
     out.ny = -1
     return out

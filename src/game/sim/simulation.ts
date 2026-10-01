@@ -9,7 +9,7 @@ import {
   segmentHitsAnyIsland,
   segmentHitsCircle,
 } from '../systems/collision'
-import { decideChaser, decideShooter } from '../systems/enemyAI'
+import { decideEnemy, enemyStats } from '../systems/enemyAI'
 import { ContextSteering } from '../systems/obstacleAvoidance'
 import { findSpawnPoint, pickEnemyKind } from '../systems/spawner'
 import { clamp, distance, moveToward, turnToward } from './mathUtils'
@@ -25,7 +25,6 @@ import type {
   InputIntent,
   MatchPhase,
   Projectile,
-  ShipKind,
   Ship,
   SimEvent,
   Weapon,
@@ -76,7 +75,6 @@ export class Simulation {
     this.initPlayer()
   }
 
-  // ---------------------------------------------------------------- lifecycle
 
   start(): void {
     this.reset(this.seed)
@@ -137,7 +135,6 @@ export class Simulation {
     }
   }
 
-  // --------------------------------------------------------------------- step
 
   step(dt: number, intent: InputIntent = NEUTRAL_INTENT): void {
     if (this.phase !== 'running' || dt <= 0) return
@@ -171,7 +168,6 @@ export class Simulation {
     }
   }
 
-  // ------------------------------------------------------------------ private
 
   private initPlayer(): void {
     const { player, arena } = this.config
@@ -219,8 +215,6 @@ export class Simulation {
     if (intent.turn !== 0) {
       ship.angle = turnToward(ship.angle, ship.angle + intent.turn * cfg.turnRate * dt, Math.PI)
     } else if (intent.steerTo) {
-      // Re-aimed every step from the ship's current position. Inside the dead zone (the
-      // pointer over the hull) the heading holds instead of spinning.
       const dx = intent.steerX - ship.x
       const dy = intent.steerY - ship.y
       if (dx * dx + dy * dy > ship.radius * ship.radius) {
@@ -248,41 +242,40 @@ export class Simulation {
 
   private updateEnemies(dt: number): void {
     for (const enemy of this.enemies) {
-      if (!enemy.alive) continue
-      const isChaser = enemy.kind === 'chaser'
-      const stats = isChaser ? this.config.chaser : this.config.shooter
-      const decision = isChaser
-        ? decideChaser(enemy, this.player, this.config.chaser)
-        : decideShooter(enemy, this.player, this.config.shooter)
+      if (!enemy.alive || enemy.kind === 'player') continue
+      const stats = enemyStats(enemy.kind, this.config)
+      const decision = decideEnemy(enemy, this.player, this.config)
+      const course = this.avoidObstacles(enemy, decision.targetAngle, clamp(decision.throttle, 0, 1))
 
-      // The AI decides where it wants to go; avoidance bends that heading around islands.
-      let targetAngle = decision.targetAngle
-      let throttle = clamp(decision.throttle, 0, 1)
-      if (throttle > 0) {
-        const steer = this.steering.steer(
-          enemy.x,
-          enemy.y,
-          enemy.angle,
-          enemy.radius,
-          targetAngle,
-          distance(enemy.x, enemy.y, this.player.x, this.player.y),
-          this.config.arena,
-        )
-        targetAngle = steer.angle
-        throttle *= 1 - this.config.avoidance.slowdown * steer.danger
-      }
-
-      enemy.angle = turnToward(enemy.angle, targetAngle, stats.turnRate * dt)
-      enemy.speed = throttle * stats.speed
-
+      enemy.angle = turnToward(enemy.angle, course.angle, stats.turnRate * dt)
+      enemy.speed = course.throttle * stats.speed
       this.moveShip(enemy, dt, this.config.hullFriction.enemy)
 
-      if (!isChaser && decision.wantsToFire && enemy.frontCooldown <= 0) {
-        frontShots(enemy, this.config.shooter.weapon, this.pendingShots)
+      if (decision.wantsToFire && 'weapon' in stats && enemy.frontCooldown <= 0) {
+        frontShots(enemy, stats.weapon, this.pendingShots)
         this.emitShots(this.pendingShots, enemy, 'front')
-        enemy.frontCooldown = this.config.shooter.weapon.cooldown
+        enemy.frontCooldown = stats.weapon.cooldown
       }
     }
+  }
+
+  /**
+   * Bends an enemy's desired heading around islands while it is under way, and slows it as
+   * the chosen heading gets more dangerous. A holding enemy keeps its heading, so a Shooter
+   * at its preferred range keeps aiming straight at the player.
+   */
+  private avoidObstacles(enemy: Ship, angle: number, throttle: number): { angle: number; throttle: number } {
+    if (throttle <= 0) return { angle, throttle }
+    const steer = this.steering.steer(
+      enemy.x,
+      enemy.y,
+      enemy.angle,
+      enemy.radius,
+      angle,
+      distance(enemy.x, enemy.y, this.player.x, this.player.y),
+      this.config.arena,
+    )
+    return { angle: steer.angle, throttle: throttle * (1 - this.config.avoidance.slowdown * steer.danger) }
   }
 
   /**
@@ -380,90 +373,65 @@ export class Simulation {
 
   /** Returns true when the projectile was consumed by a target this step. */
   private resolveProjectileHit(projectile: Projectile, dx: number, dy: number): boolean {
-    if (projectile.faction === 'player') {
-      const reach = projectile.radius + Math.max(this.config.chaser.radius, this.config.shooter.radius)
-      const found = this.broadphase.query(
-        projectile.x + dx * 0.5,
-        projectile.y + dy * 0.5,
-        Math.hypot(dx, dy) * 0.5 + reach,
-        this.candidates,
-      )
-      for (let i = 0; i < found; i++) {
-        const index = this.candidates[i]
-        if (index === undefined) continue
-        const enemy = this.enemies[index]
-        if (enemy === undefined || !enemy.alive) continue
-        if (
-          !segmentHitsCircle(
-            projectile.x,
-            projectile.y,
-            dx,
-            dy,
-            enemy.x,
-            enemy.y,
-            enemy.radius + projectile.radius,
-          )
-        ) {
-          continue
-        }
-        projectile.alive = false
-        const killed = applyDamage(enemy, projectile.damage)
-        this.events.push({ type: 'hit', x: enemy.x, y: enemy.y, faction: 'player', surface: 'ship' })
-        if (killed) this.killEnemy(enemy, 'projectile')
-        return true
-      }
-      return false
-    }
+    return projectile.faction === 'player' ? this.hitEnemy(projectile, dx, dy) : this.hitPlayer(projectile, dx, dy)
+  }
 
-    if (!this.player.alive) return false
-    if (
-      !segmentHitsCircle(
-        projectile.x,
-        projectile.y,
-        dx,
-        dy,
-        this.player.x,
-        this.player.y,
-        this.player.radius + projectile.radius,
-      )
-    ) {
+  /** A player projectile against the enemies, through the broadphase and a swept test. */
+  private hitEnemy(projectile: Projectile, dx: number, dy: number): boolean {
+    const reach = projectile.radius + Math.max(this.config.chaser.radius, this.config.shooter.radius)
+    const found = this.broadphase.query(
+      projectile.x + dx * 0.5,
+      projectile.y + dy * 0.5,
+      Math.hypot(dx, dy) * 0.5 + reach,
+      this.candidates,
+    )
+    for (let i = 0; i < found; i++) {
+      const enemy = this.enemies[this.candidates[i] ?? -1]
+      if (enemy === undefined || !enemy.alive) continue
+      if (!segmentHitsCircle(projectile.x, projectile.y, dx, dy, enemy.x, enemy.y, enemy.radius + projectile.radius)) {
+        continue
+      }
+      projectile.alive = false
+      const killed = applyDamage(enemy, projectile.damage)
+      this.events.push({ type: 'hit', x: enemy.x, y: enemy.y, faction: 'player', surface: 'ship' })
+      if (killed) this.killEnemy(enemy, 'projectile')
+      return true
+    }
+    return false
+  }
+
+  /** An enemy projectile against the player, with a swept test. */
+  private hitPlayer(projectile: Projectile, dx: number, dy: number): boolean {
+    const player = this.player
+    if (!player.alive) return false
+    if (!segmentHitsCircle(projectile.x, projectile.y, dx, dy, player.x, player.y, player.radius + projectile.radius)) {
       return false
     }
     projectile.alive = false
-    applyDamage(this.player, projectile.damage)
-    this.events.push({ type: 'hit', x: this.player.x, y: this.player.y, faction: 'enemy', surface: 'ship' })
-    this.events.push({ type: 'playerDamaged', amount: projectile.damage, hp: this.player.hp })
-    if (!this.player.alive) {
-      this.events.push({ type: 'explosion', x: this.player.x, y: this.player.y, angle: this.player.angle, kind: 'player' })
-    }
+    this.events.push({ type: 'hit', x: player.x, y: player.y, faction: 'enemy', surface: 'ship' })
+    this.damagePlayer(projectile.damage)
     return true
   }
 
+  /** A Chaser touching the player explodes: it damages the player and dies without scoring. */
   private resolveChaserContacts(): void {
-    if (!this.player.alive) return
+    const player = this.player
     for (const enemy of this.enemies) {
+      if (!player.alive) return
       if (!enemy.alive || enemy.kind !== 'chaser') continue
-      if (
-        !circlesOverlap(
-          enemy.x,
-          enemy.y,
-          enemy.radius,
-          this.player.x,
-          this.player.y,
-          this.player.radius,
-        )
-      ) {
-        continue
-      }
-      enemy.alive = false
-      const damage = this.config.chaser.contactDamage
-      applyDamage(this.player, damage)
-      this.events.push({ type: 'playerDamaged', amount: damage, hp: this.player.hp })
+      if (!circlesOverlap(enemy.x, enemy.y, enemy.radius, player.x, player.y, player.radius)) continue
       this.killEnemy(enemy, 'selfDestruct')
-      if (!this.player.alive) {
-        this.events.push({ type: 'explosion', x: this.player.x, y: this.player.y, angle: this.player.angle, kind: 'player' })
-        return
-      }
+      this.damagePlayer(this.config.chaser.contactDamage)
+    }
+  }
+
+  /** Damages the player, reporting it, and the explosion if the hull is destroyed. */
+  private damagePlayer(amount: number): void {
+    const player = this.player
+    applyDamage(player, amount)
+    this.events.push({ type: 'playerDamaged', amount, hp: player.hp })
+    if (!player.alive) {
+      this.events.push({ type: 'explosion', x: player.x, y: player.y, angle: player.angle, kind: 'player' })
     }
   }
 
@@ -488,7 +456,7 @@ export class Simulation {
     if (this.enemies.length >= this.config.spawn.maxAliveEnemies) return
 
     const kind = pickEnemyKind(this.rng, this.config.spawn)
-    const stats = kind === 'chaser' ? this.config.chaser : this.config.shooter
+    const stats = enemyStats(kind, this.config)
     const point = findSpawnPoint(
       this.rng,
       this.config.arena,
@@ -525,12 +493,11 @@ export class Simulation {
   }
 }
 
-// -------------------------------------------------------------------- factories
 
 function createShip(): Ship {
   return {
     id: -1,
-    kind: 'chaser' as ShipKind,
+    kind: 'chaser',
     faction: 'enemy',
     x: 0,
     y: 0,

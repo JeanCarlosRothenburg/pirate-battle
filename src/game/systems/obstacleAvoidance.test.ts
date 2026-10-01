@@ -47,7 +47,6 @@ describe('ContextSteering', () => {
 
   it('ignores obstacles beyond the goal', () => {
     const steering = new ContextSteering(avoidance)
-    // The goal is 60 px ahead; the island starts about 110 px ahead.
     const result = steering.steer(360, 500, 0, 20, 0, 60, arenaWith(circle))
     expect(result.angle).toBe(0)
   })

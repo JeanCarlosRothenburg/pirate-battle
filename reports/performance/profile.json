@@ -1,0 +1,85 @@
+{
+  "measuredAt": "2026-10-01T18:31:02.130Z",
+  "browser": "Google Chrome 154.0.8037.59 (headless, GPU: ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version))",
+  "viewport": "1280x720 CSS px, device pixel ratio 1",
+  "match": {
+    "seed": 7,
+    "sessionSeconds": 180,
+    "spawnIntervalSeconds": 3,
+    "input": "W + D + Space + Q held (circling, bow gun and port broadside firing)",
+    "playerSustained": true
+  },
+  "combat": {
+    "durationSeconds": 179.93,
+    "frames": 10796,
+    "averageFps": 60,
+    "frameTimeMs": {
+      "p50": 16.7,
+      "p95": 16.7,
+      "p99": 16.8,
+      "max": 16.8
+    },
+    "framesOver25ms": 0,
+    "entities": {
+      "maxEnemies": 10,
+      "averageEnemies": 5.52,
+      "maxProjectiles": 11,
+      "averageProjectiles": 4.87,
+      "maxTotal": 21
+    },
+    "mainThreadPerFrameMs": {
+      "allTasks": 0.94,
+      "script": 0.6
+    }
+  },
+  "memory": {
+    "menuBaseline": {
+      "jsHeapUsedMB": 4.12,
+      "domNodes": 102,
+      "eventListeners": 162,
+      "documents": 1
+    },
+    "cycles": [
+      {
+        "cycle": 1,
+        "jsHeapUsedMB": 8.27,
+        "domNodes": 105,
+        "eventListeners": 183,
+        "documents": 1,
+        "canvases": 0
+      },
+      {
+        "cycle": 2,
+        "jsHeapUsedMB": 8.45,
+        "domNodes": 105,
+        "eventListeners": 184,
+        "documents": 1,
+        "canvases": 0
+      },
+      {
+        "cycle": 3,
+        "jsHeapUsedMB": 8.54,
+        "domNodes": 105,
+        "eventListeners": 184,
+        "documents": 1,
+        "canvases": 0
+      },
+      {
+        "cycle": 4,
+        "jsHeapUsedMB": 8.64,
+        "domNodes": 105,
+        "eventListeners": 183,
+        "documents": 1,
+        "canvases": 0
+      },
+      {
+        "cycle": 5,
+        "jsHeapUsedMB": 8.67,
+        "domNodes": 105,
+        "eventListeners": 184,
+        "documents": 1,
+        "canvases": 0
+      }
+    ]
+  }
+}

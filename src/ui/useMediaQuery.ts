@@ -12,5 +12,4 @@ export function useMediaQuery(query: string): boolean {
   return matches
 }
 
-/** Touch devices held upright. Matches are played in landscape there. */
 export const PORTRAIT_TOUCH_QUERY = '(orientation: portrait) and (any-pointer: coarse)'

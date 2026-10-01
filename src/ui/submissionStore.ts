@@ -3,18 +3,11 @@ import { browserStorage } from '../storage/localStore'
 import type { MatchResult } from '../storage/lastResult'
 import { loadPendingMatches, savePendingMatches } from '../storage/pendingMatches'
 
-/**
- * - queued: waiting to be sent (also every pending match restored after a refresh)
- * - sending: request in flight
- * - failed: the last attempt failed; the match stays queued until a retry succeeds
- * - confirmed: the server holds the record
- */
 export type SubmissionStatus = 'queued' | 'sending' | 'failed' | 'confirmed'
 
 export interface Submission {
   readonly status: SubmissionStatus
   readonly error?: string
-  /** False when a retry recovered a record the server already had. */
   readonly created?: boolean
 }
 
@@ -31,6 +24,14 @@ export interface SubmissionState {
   statusOf(matchId: string): Submission
 }
 
+const CONFIRMED: Submission = { status: 'confirmed' }
+
+/**
+ * Tracks the registration of completed matches. Statuses: `queued` (waiting to be sent,
+ * including every pending match restored after a refresh), `sending`, `failed` (the match
+ * stays queued until a retry succeeds) and `confirmed`. Enqueueing is idempotent, and a
+ * match neither tracked nor queued was confirmed in an earlier session.
+ */
 export function createSubmissionStore(storage: Storage | null = browserStorage()) {
   const restored = loadPendingMatches(storage)
 
@@ -47,7 +48,6 @@ export function createSubmissionStore(storage: Storage | null = browserStorage()
       submissions: Object.fromEntries(restored.map((r) => [r.matchId, { status: 'queued' as const }])),
 
       enqueue(record) {
-        // Idempotent: a match already queued or confirmed is never queued twice.
         if (get().submissions[record.matchId] !== undefined) return
         setQueue([...get().queue, record])
         setStatus(record.matchId, { status: 'queued' })
@@ -76,8 +76,7 @@ export function createSubmissionStore(storage: Storage | null = browserStorage()
       },
 
       statusOf(matchId) {
-        // Not tracked and not queued means it was confirmed in an earlier session.
-        return get().submissions[matchId] ?? { status: 'confirmed' }
+        return get().submissions[matchId] ?? CONFIRMED
       },
     }
   })

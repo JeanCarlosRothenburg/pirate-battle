@@ -41,7 +41,6 @@ export class PointerSteering {
 
   private readonly handleMove = (event: Event): void => {
     const pointer = event as PointerEvent
-    // offsetX/Y are relative to the canvas, in CSS pixels, matching the letterbox units.
     this.screenX = pointer.offsetX
     this.screenY = pointer.offsetY
     this.hasPoint = true

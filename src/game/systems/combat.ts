@@ -74,7 +74,3 @@ export function applyDamage(ship: Ship, amount: number): boolean {
   }
   return false
 }
-
-export function healthRatio(ship: Ship): number {
-  return ship.maxHp === 0 ? 0 : ship.hp / ship.maxHp
-}

@@ -1,21 +1,9 @@
 import { z } from 'zod'
 import { matchResultSchema } from '../storage/lastResult'
 
-/**
- * Typed contracts for the ranking and match history API. The client validates every
- * response against them, and the MSW handlers build their responses from the same schemas,
- * so the two sides cannot drift apart.
- *
- *   PUT /api/matches/:matchId                      register a completed match (idempotent)
- *   GET /api/ranking?config=&page=&pageSize=      ranking for one configuration
- *   GET /api/players/:playerId/matches?page=&pageSize=   a player's match history
- */
-
-/** A completed match as registered: identity, date, score, duration, reason, configuration. */
 export const matchRecordSchema = matchResultSchema
 export type MatchRecord = z.infer<typeof matchRecordSchema>
 
-/** Five rows per page, as in the records screens of the samples. */
 export const PAGE_SIZE = 5
 
 export const pageQuerySchema = z.object({
@@ -46,7 +34,6 @@ export const rankingEntrySchema = z.object({
 export type RankingEntry = z.infer<typeof rankingEntrySchema>
 
 export const rankingPageSchema = pageOf(rankingEntrySchema).extend({
-  /** The configuration fingerprint every entry on this page was played with. */
   config: z.string(),
 })
 export type RankingPage = z.infer<typeof rankingPageSchema>
@@ -56,12 +43,9 @@ export type HistoryPage = z.infer<typeof historyPageSchema>
 
 export const registerResponseSchema = z.object({
   record: matchRecordSchema,
-  /** False when the match was already registered: a retry recovered the existing record. */
   created: z.boolean(),
 })
 export type RegisterResponse = z.infer<typeof registerResponseSchema>
-
-export const apiErrorSchema = z.object({ error: z.string() })
 
 /**
  * Ranking order, deterministic for any data: higher score first; on a tie, the match that

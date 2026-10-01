@@ -4,7 +4,6 @@ import type { Simulation } from '../sim/simulation'
 import type { MatchPhase, SimEvent } from '../sim/types'
 
 const LOW_HEALTH_RATIO = 0.3
-/** Countdown ticks in the last seconds of the match. */
 const WARNING_SECONDS = [10, 5, 4, 3, 2, 1] as const
 const CANNON: readonly GameSound[] = ['cannon_fire_1', 'cannon_fire_2', 'cannon_fire_3']
 const WOOD_HIT: readonly GameSound[] = ['ship_wood_hit_1', 'ship_wood_hit_2']

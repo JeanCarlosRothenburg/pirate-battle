@@ -44,11 +44,8 @@ body {
 
 .game-stage canvas {
   display: block;
-  /* Dragging on the sea steers; it must not scroll or zoom the page. */
   touch-action: none;
 }
-
-/* ------------------------------------------------------------------ HUD */
 
 .hud {
   position: absolute;
@@ -95,7 +92,6 @@ body {
     center / 256px 48px no-repeat;
 }
 
-/* The fill art sits at x 27–229 of its 256 px frame; clip it from the right by health. */
 .hud-health-fill {
   position: absolute;
   inset: 0;
@@ -246,9 +242,6 @@ body {
   text-align: center;
 }
 
-
-/* -------------------------------------------------------------- loading */
-
 .loading {
   position: absolute;
   inset: 0;
@@ -263,7 +256,6 @@ body {
   text-shadow: 0 2px 0 rgb(0 0 0 / 0.5);
 }
 
-/* A solid panel keeps text contrast independent of the busy background art. */
 .loading-panel {
   display: flex;
   flex-direction: column;
@@ -332,17 +324,11 @@ body {
   outline-offset: 3px;
 }
 
-/* ---------------------------------------------------------------- menus */
-
 :focus-visible {
   outline: 3px solid #ffd35c;
   outline-offset: 3px;
 }
 
-/*
- * Screen headings take focus when a screen opens, so screen readers start there. They are
- * not controls and not in the tab order, so they get no focus ring.
- */
 [tabindex='-1']:focus {
   outline: none;
 }
@@ -363,7 +349,6 @@ body:has(.menu-screen) {
   overflow: auto;
 }
 
-/* The menu panel art as a nine-slice, so panels of any size keep their brass corners. */
 .panel {
   border: 36px solid transparent;
   border-image: image-set(
@@ -406,8 +391,6 @@ body:has(.menu-screen) {
 .panel-heading {
   font-size: 15px;
 }
-
-/* ---------------------------------------------------------------- buttons */
 
 .menu-button {
   min-width: 200px;
@@ -478,10 +461,6 @@ body:has(.menu-screen) {
   );
 }
 
-/* ---------------------------------------------------------------- tabs */
-
-/* -------------------------------------------------------------- controls */
-
 .controls-help {
   width: 100%;
 }
@@ -507,8 +486,6 @@ body:has(.menu-screen) {
 .controls-row dd {
   margin: 0;
 }
-
-/* ----------------------------------------------------------------- forms */
 
 .options-panel {
   width: min(100%, 520px);
@@ -580,10 +557,6 @@ body:has(.menu-screen) {
   min-width: 150px;
 }
 
-/* ---------------------------------------------------------------- result */
-
-/* ---------------------------------------------------------------- pause */
-
 .pause-dialog {
   width: min(92vw, 480px);
   padding: 0;
@@ -599,8 +572,6 @@ body:has(.menu-screen) {
   flex-direction: column;
   align-items: center;
 }
-
-/* --------------------------------------------------------------- records */
 
 .records {
   display: grid;
@@ -685,8 +656,6 @@ body:has(.menu-screen) {
   font: inherit;
 }
 
-/* ----------------------------------------------------------------- touch */
-
 .touch-controls {
   display: none;
 }
@@ -697,7 +666,6 @@ body:has(.menu-screen) {
   color: #ffd35c;
 }
 
-/* A phone outline turned on its side, drawn in CSS: the assets have no rotation icon. */
 .rotate-icon {
   display: block;
   width: 34px;
@@ -726,7 +694,6 @@ body:has(.menu-screen) {
   }
 }
 
-/* Only devices with a coarse pointer (touch) get the on-screen buttons. */
 @media (any-pointer: coarse) {
   .touch-controls {
     position: absolute;
@@ -751,7 +718,6 @@ body:has(.menu-screen) {
   pointer-events: auto;
 }
 
-/* The middle button sits one row higher, like the reference layout. */
 .touch-cluster > :nth-child(1) {
   grid-area: 2 / 1;
 }
@@ -837,15 +803,12 @@ body:has(.menu-screen) {
   );
 }
 
-/* Phones in landscape are short: shrink the HUD and buttons so nothing is cut off. */
 @media (max-height: 520px) {
   .hud-top,
   .touch-controls {
     zoom: 0.72;
   }
 }
-
-/* ------------------------------------------------- main menu (sample_menu) */
 
 .menu-main {
   width: min(100%, 600px);
@@ -922,8 +885,6 @@ body:has(.menu-screen) {
   min-height: 52px;
   font-size: 15px;
 }
-
-/* ---------------------------------- Captain's Log (sample_ranking/history) */
 
 .records-panel {
   width: min(100%, 1100px);
@@ -1129,11 +1090,6 @@ body:has(.menu-screen) {
   }
 }
 
-/*
- * The main menu must fit the screen without scrolling. Everything on it is required (title,
- * Play, Options, control instructions, records buttons), so short screens compact it, drop
- * the purely decorative ship and motto, and phones in landscape split it into two columns.
- */
 @media (max-height: 820px), (max-width: 520px) {
   .menu-screen:has(.menu-main) {
     padding-block: 10px;
@@ -1250,7 +1206,6 @@ body:has(.menu-screen) {
   }
 }
 
-/* The Captain's Log also fits short screens without scrolling. */
 @media (max-height: 820px) {
   .menu-screen:has(.records-panel) {
     padding-block: 10px;
@@ -1292,14 +1247,11 @@ body:has(.menu-screen) {
   }
 }
 
-/* Upright, the match is paused until the device turns; the buttons would not fit anyway. */
 @media (orientation: portrait) {
   .touch-controls {
     display: none;
   }
 }
-
-/* ---------------------------------------------------- result (sample_result) */
 
 .result-panel {
   width: min(100%, 740px);

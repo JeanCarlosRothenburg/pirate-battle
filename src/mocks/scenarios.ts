@@ -3,7 +3,6 @@ import { readStored, removeStored, writeStored } from '../storage/localStore'
 
 export const SCENARIO_KEY = 'pirate-battle:mock-scenario:v1'
 
-/** Network conditions the mock API can simulate (brief §6). */
 export const SCENARIOS = {
   success: 'Success: quick, reliable responses',
   empty: 'Empty lists',

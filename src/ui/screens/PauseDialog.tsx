@@ -5,7 +5,6 @@ import { playUiSound } from '../uiSounds'
 
 interface PauseDialogProps {
   readonly open: boolean
-  /** The device is upright; matches resume only in landscape. */
   readonly rotateToResume?: boolean
   readonly onResume: () => void
   readonly onMainMenu: () => void
@@ -35,7 +34,6 @@ export function PauseDialog({ open, rotateToResume = false, onResume, onMainMenu
     }
   }, [open])
 
-  // The content swaps when the device turns; keep focus inside the dialog on its first control.
   useEffect(() => {
     if (dialog.current?.open) dialog.current.querySelector<HTMLButtonElement>('button')?.focus()
   }, [rotateToResume])

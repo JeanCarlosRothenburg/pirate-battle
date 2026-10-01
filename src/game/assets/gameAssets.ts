@@ -15,14 +15,11 @@ import {
 import type { AssetDensity, GameSound } from './manifest'
 import { parseTextureAtlasXml } from './textureAtlasXml'
 
-/** Steps used to show partial health without allocating textures per frame. */
 export const HEALTH_FILL_STEPS = 20
 
 export interface HealthBarArt {
   readonly frame: Texture
-  /** Horizontal offset of the fill art inside the frame, in frame pixels. */
   readonly fillOffsetX: number
-  /** Index `k` holds the fill clipped to `k / HEALTH_FILL_STEPS`; index 0 is unused. */
   readonly player: readonly Texture[]
   readonly enemy: readonly Texture[]
 }
@@ -32,7 +29,6 @@ export interface GameTextures {
   readonly ui: Readonly<Record<string, Texture>>
   /** Tile `n` of the tile sheet, 1-based, numbered like `assets/png/<density>/tiles/tile_<n>.png`. */
   tile(index: number): Texture
-  /** Seamless tiles, loaded standalone so they can repeat. */
   readonly water: Texture
   readonly sand: Texture
   readonly grass: Texture
@@ -47,7 +43,6 @@ export interface GameAssets {
 
 export type ProgressListener = (fraction: number) => void
 
-/** Alpha bounds of the `enemy_health_fill_*` art inside its 160 × 40 frame (from ui_sheet.json). */
 const HEALTH_FILL_BOUNDS = { x: 21, w: 118 } as const
 
 let pending: Promise<GameAssets> | null = null
@@ -102,7 +97,6 @@ async function loadAll(): Promise<GameAssets> {
     { src: tiles.grass, data: resolution },
   ]
 
-  // Textures count as one unit of work per file, like each sound.
   const totalUnits = textureRequests.length + GAME_SOUNDS.length
   let textureFraction = 0
   let soundsDone = 0
@@ -170,6 +164,11 @@ function sliceTiles(sheet: Texture): Texture[] {
   return tiles
 }
 
+/**
+ * The health bar frame and its fills, clipped once into twenty widths so partial health
+ * never allocates a texture per frame. The fill art spans x 21 to 139 of its 160 × 40 frame
+ * (from ui_sheet.json); index `k` is clipped to `k / 20`, and index 0 is unused.
+ */
 function buildHealthBarArt(ui: Record<string, Texture>): HealthBarArt {
   const need = (name: string): Texture => {
     const found = ui[name]
@@ -205,7 +204,6 @@ async function loadSounds(onEach: () => void): Promise<SoundBuffers> {
       const response = await fetch(soundUrl(name))
       if (!response.ok) throw new Error(`Sound failed to load: ${name} (HTTP ${response.status})`)
       const data = await response.arrayBuffer()
-      // Without Web Audio the game still runs, silently.
       if (context !== null) buffers.set(name, await context.decodeAudioData(data))
       onEach()
     }),

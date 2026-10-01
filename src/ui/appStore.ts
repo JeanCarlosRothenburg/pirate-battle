@@ -8,13 +8,15 @@ import type { MatchResult } from '../storage/lastResult'
 import { gameConfigFor, loadOptions, saveOptions } from '../storage/options'
 import type { PlayerOptions } from '../storage/options'
 import { loadPlayerId, randomId } from '../storage/player'
+import { readTestMode } from './testMode'
+import type { TestMode } from './testMode'
 
 export type Screen = 'menu' | 'options' | 'records' | 'game' | 'result'
 export type RecordsTab = 'ranking' | 'history'
 
-/** Everything a match froze when it started (brief §3: later option changes do not apply). */
 export interface MatchSetup {
   readonly matchId: string
+  readonly seed: number
   readonly playerName: string
   readonly options: PlayerOptions
   readonly config: GameConfig
@@ -26,7 +28,6 @@ export interface AppState {
   readonly playerId: string
   readonly lastResult: MatchResult | null
   readonly match: MatchSetup | null
-  /** Which tab the Captain's Log opens on. */
   readonly recordsTab: RecordsTab
 
   /** Starts a new match with a snapshot of the current options. */
@@ -45,13 +46,17 @@ export interface AppState {
   showResult(): void
 }
 
-export function createAppStore(storage: Storage | null = browserStorage()) {
+/**
+ * The app's screen and session state. Play freezes the current options into the match setup
+ * (brief §3: later option changes apply to the next match), with a new match id and seed.
+ * Only the result screen survives a refresh; reloading mid-match abandons it unrecorded.
+ */
+export function createAppStore(storage: Storage | null = browserStorage(), testMode: TestMode = readTestMode()) {
   const lastResult = loadLastResult(storage)
   const initialScreen: Screen = loadView(storage) === 'result' && lastResult !== null ? 'result' : 'menu'
 
   return create<AppState>()((set, get) => {
     const go = (screen: Screen): void => {
-      // Only the result screen survives a refresh; reloading mid-match abandons it.
       saveView(storage, screen === 'result' ? 'result' : 'menu')
       set({ screen })
     }
@@ -69,6 +74,7 @@ export function createAppStore(storage: Storage | null = browserStorage()) {
         set({
           match: {
             matchId: randomId(),
+            seed: testMode.matchSeed ?? randomSeed(),
             playerName: options.playerName,
             options,
             config: gameConfigFor(options),
@@ -128,3 +134,7 @@ export function createAppStore(storage: Storage | null = browserStorage()) {
 }
 
 export const useAppStore = createAppStore()
+
+function randomSeed(): number {
+  return (Math.random() * 0x1_0000_0000) >>> 0
+}

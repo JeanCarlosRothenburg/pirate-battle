@@ -2,7 +2,7 @@ import { useSubmissionStore } from '../submissionStore'
 
 /** The registration state of one match, with a retry when it failed. */
 export function SubmissionStatus({ matchId }: { readonly matchId: string }) {
-  const submission = useSubmissionStore((s) => s.submissions[matchId]) ?? { status: 'confirmed' as const }
+  const submission = useSubmissionStore((s) => s.statusOf(matchId))
   const retry = useSubmissionStore((s) => s.retry)
 
   switch (submission.status) {

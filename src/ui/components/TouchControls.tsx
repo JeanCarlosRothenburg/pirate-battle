@@ -21,11 +21,7 @@ export function TouchControls({ touch }: { readonly touch: TouchButtons }) {
   const handlers = (action: TouchAction) => ({
     onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
       event.preventDefault()
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId)
-      } catch {
-        // The pointer is already gone; the press still counts until pointerup.
-      }
+      capturePointer(event.currentTarget, event.pointerId)
       touch.press(action)
     },
     onPointerUp: () => touch.release(action),
@@ -37,7 +33,6 @@ export function TouchControls({ touch }: { readonly touch: TouchButtons }) {
   const cluster = (buttons: typeof LEFT, side: string) => (
     <div className={`touch-cluster touch-${side}`}>
       {buttons.map(([action, label, icon]) => (
-        // Not in the tab order: keyboard players have keys for every action.
         <button key={action} type="button" tabIndex={-1} aria-label={label} className={`touch-button touch-${icon}`} {...handlers(action)}>
           <span className={`hud-icon touch-icon-${icon}`} aria-hidden="true" />
         </button>
@@ -51,4 +46,17 @@ export function TouchControls({ touch }: { readonly touch: TouchButtons }) {
       {cluster(RIGHT, 'right')}
     </div>
   )
+}
+
+/**
+ * Captures the pointer on the button, so sliding off still releases the action. It fails if
+ * the pointer is already gone; the press then still counts until its pointerup.
+ */
+function capturePointer(element: Element, pointerId: number): boolean {
+  try {
+    element.setPointerCapture(pointerId)
+    return true
+  } catch {
+    return false
+  }
 }

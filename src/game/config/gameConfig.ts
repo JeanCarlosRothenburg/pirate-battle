@@ -58,6 +58,7 @@ export interface ShooterConfig {
   readonly turnRate: number
   readonly attackRange: number
   readonly preferredRange: number
+  readonly aimTolerance: number
   readonly weapon: WeaponConfig
 }
 
@@ -71,29 +72,17 @@ export interface SpawnConfig {
   readonly weights: { readonly chaser: number; readonly shooter: number }
 }
 
-/**
- * Drag while a hull scrapes an island, as the fraction of tangential speed lost per second.
- * Each contact step keeps `1 - hullFriction * dt` of the sliding motion, and of the stored
- * speed. 0 slides freely; 60 stops the ship on contact at the fixed 1/60 s step.
- */
 export interface HullFrictionConfig {
   readonly player: number
   readonly enemy: number
 }
 
-/** Enemy obstacle avoidance by context steering; see `systems/obstacleAvoidance.ts`. */
 export interface AvoidanceConfig {
-  /** Headings sampled around the ship. More slots, finer detours, more ray casts per step. */
   readonly slots: number
-  /** How far ahead islands and walls are seen, in px. */
   readonly lookahead: number
-  /** Clearance kept beyond the hull radius, in px. */
   readonly margin: number
-  /** Extra interest toward the current heading (0–1), so detours do not flip side. */
   readonly headingBias: number
-  /** Headings within this much of the safest heading's danger (0–1) stay eligible. */
   readonly dangerTolerance: number
-  /** Share of throttle given up at full danger (0–1), so ships turn tighter near islands. */
   readonly slowdown: number
 }
 
@@ -157,6 +146,7 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     turnRate: 1.8,
     attackRange: 390,
     preferredRange: 300,
+    aimTolerance: 0.25,
     weapon: {
       cooldown: 1.7,
       muzzleOffset: 26,
@@ -173,18 +163,11 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     weights: { chaser: 0.5, shooter: 0.5 },
   },
   hullFriction: {
-    // Scraping costs the player about 2.5 % of speed per step: the hull noticeably grinds,
-    // but with the throttle held the ship keeps about 97 % of cruise speed along the shore.
     player: 1.5,
-    // Enemies scrape a little harder, so a pursuer rounding an island visibly loses ground
-    // and the player can use islands to break contact.
     enemy: 2.5,
   },
   avoidance: {
-    // 16 headings (22.5° apart), refined between slots, are plenty at these turn rates.
     slots: 16,
-    // About one second of Chaser travel: enough warning to turn at 2.7 rad/s, short enough
-    // that islands far behind the player do not bend the chase.
     lookahead: 170,
     margin: 10,
     headingBias: 0.2,

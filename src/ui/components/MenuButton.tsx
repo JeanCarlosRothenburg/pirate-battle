@@ -4,7 +4,6 @@ import { playUiSound } from '../uiSounds'
 
 interface MenuButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: 'primary' | 'secondary'
-  /** Sound played on activation. */
   readonly sound?: UiSound
 }
 

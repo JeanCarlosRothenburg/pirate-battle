@@ -5,6 +5,7 @@ import type { GameTextures } from '../assets/gameAssets'
 import type { GameConfig } from '../config/gameConfig'
 import { angleDelta } from '../sim/mathUtils'
 import { createRng } from '../sim/rng'
+import { enemyStats } from '../systems/enemyAI'
 import type { Rng } from '../sim/rng'
 import type { Simulation } from '../sim/simulation'
 import type { Ship, ShipKind, SimEvent } from '../sim/types'
@@ -13,20 +14,10 @@ import { EffectLayer } from './effects'
 import { fitLetterbox } from './letterbox'
 import type { Letterbox } from './letterbox'
 
-/**
- * Ship sprites come in six colours and four states: `ship_1..6` intact, `ship_7..12`
- * damaged, `ship_13..18` heavily damaged, `ship_19..24` wrecked. Colour order: white,
- * black, red, green, blue, yellow.
- */
 const SHIP_COLOUR: Readonly<Record<ShipKind, number>> = { player: 4, chaser: 2, shooter: 1 }
 const WRECK_STAGE = 3
-/** The art points its bow along +y; the simulation's angle 0 points along +x. */
 const ART_ROTATION = -Math.PI / 2
 const SHIP_ART_LENGTH = 113
-/**
- * Hull length relative to the collision radius. Ships are long and the collision shape is
- * a circle, so the bow and stern overhang it slightly while the beam sits inside it.
- */
 const SHIP_LENGTH_PER_RADIUS = 2.8
 const BALL_ART_SIZE = 10
 const HEALTH_BAR_ART_WIDTH = 160
@@ -52,10 +43,17 @@ interface ShipView {
  * PixiJS views driven by simulation state. The renderer never mutates the simulation: it
  * reads positions each frame, interpolating between the last two fixed steps, and turns
  * simulation events into short-lived effects.
+ *
+ * Ship sprites come in six colours and four states (`ship_1..6` intact, `ship_7..12`
+ * damaged, `ship_13..18` heavily damaged, `ship_19..24` wrecked; colours white, black, red,
+ * green, blue, yellow). The art points its bow along +y while the simulation's angle 0
+ * points along +x, hence a quarter-turn offset. Hulls are drawn 2.8 times the collision
+ * radius long: bow and stern overhang the circle slightly while the beam sits inside it.
+ * `letterbox` is the current screen-to-arena mapping, shared with pointer input. Visual
+ * randomness is seeded, so screenshots of the same match are reproducible.
  */
 export class ArenaRenderer {
   readonly root = new Container()
-  /** Current screen-to-arena mapping, shared with pointer input. */
   readonly letterbox: Letterbox = { scale: 1, offsetX: 0, offsetY: 0 }
 
   private readonly world = new Container()
@@ -75,7 +73,6 @@ export class ArenaRenderer {
   private readonly flashFrames: readonly Texture[]
   private readonly debris: readonly Texture[]
   private readonly flames: readonly Texture[]
-  /** Visual-only randomness, seeded so screenshots of the same match are reproducible. */
   private rng: Rng = createRng(1)
   private frame = 0
   private time = 0
@@ -111,7 +108,6 @@ export class ArenaRenderer {
     const box = fitLetterbox(screenWidth, screenHeight, width, height, this.letterbox)
     this.world.scale.set(box.scale)
     this.world.position.set(box.offsetX, box.offsetY)
-    // The whole screen in arena coordinates, plus a pixel of overlap against rounding seams.
     const bleed = 1 / box.scale
     this.background.cover(
       -box.offsetX / box.scale - bleed,
@@ -133,7 +129,6 @@ export class ArenaRenderer {
   onStep(sim: Simulation): void {
     for (const event of sim.events) this.spawnEventEffects(event)
 
-    // New projectiles still hold their muzzle position in prevX/prevY.
     for (const p of sim.projectiles) {
       if (p.id <= this.lastProjectileId) continue
       this.lastProjectileId = p.id
@@ -177,15 +172,11 @@ export class ArenaRenderer {
     this.views.clear()
     for (const kind of Object.keys(this.free) as ShipKind[]) this.free[kind].length = 0
     this.balls.length = 0
-    // Textures belong to the shared asset cache and are reused by the next match.
     this.root.destroy({ children: true, context: true })
   }
 
-  // ------------------------------------------------------------------- ships
-
   private syncShip(ship: Ship, alpha: number): void {
     let view = this.views.get(ship.id)
-    // Ids restart at every match, so a surviving id may now belong to another kind.
     if (view !== undefined && view.kind !== ship.kind) {
       this.release(ship.id, view)
       view = undefined
@@ -276,16 +267,12 @@ export class ArenaRenderer {
   }
 
   private radiusOf(kind: ShipKind): number {
-    if (kind === 'player') return this.config.player.radius
-    return kind === 'chaser' ? this.config.chaser.radius : this.config.shooter.radius
+    return kind === 'player' ? this.config.player.radius : enemyStats(kind, this.config).radius
   }
-
-  // ------------------------------------------------------------- projectiles
 
   private syncProjectiles(sim: Simulation, alpha: number): void {
     const trails = this.trails.clear()
     let used = 0
-    // Trails are grouped by faction into two strokes for the whole frame.
     for (const faction of ['player', 'enemy'] as const) {
       let any = false
       for (const p of sim.projectiles) {
@@ -320,8 +307,6 @@ export class ArenaRenderer {
     ball.visible = true
     return ball
   }
-
-  // ----------------------------------------------------------------- effects
 
   private spawnEventEffects(event: SimEvent): void {
     switch (event.type) {

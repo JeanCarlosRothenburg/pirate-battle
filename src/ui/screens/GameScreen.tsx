@@ -9,10 +9,10 @@ import { MenuButton } from '../components/MenuButton'
 import { TouchControls } from '../components/TouchControls'
 import { TouchButtons } from '../../game/input/touch'
 import { PORTRAIT_TOUCH_QUERY, useMediaQuery } from '../useMediaQuery'
+import { readTestMode } from '../testMode'
 import { useSubmissionStore } from '../submissionStore'
 import { PauseDialog } from './PauseDialog'
 
-/** Time to watch the final explosion or sinking before the result screen appears. */
 const RESULT_DELAY_MS = 1500
 
 /**
@@ -21,7 +21,9 @@ const RESULT_DELAY_MS = 1500
  *
  * Game state reaches the HUD through `HudPublisher` writing to the `data-hud` slots, never
  * through React state, so those slots are left empty in JSX and React never owns their text.
- * React state only tracks asset loading and phase transitions.
+ * React state only tracks asset loading and phase transitions. A finished match is queued for
+ * registration at once, and the result screen follows 1.5 s later, after the final
+ * explosion or sinking. On touch devices, turning upright pauses the match.
  */
 export function GameScreen({ match }: { readonly match: MatchSetup }) {
   const finishMatch = useAppStore((s) => s.finishMatch)
@@ -37,8 +39,6 @@ export function GameScreen({ match }: { readonly match: MatchSetup }) {
   const [touch] = useState(() => new TouchButtons())
   const portrait = useMediaQuery(PORTRAIT_TOUCH_QUERY)
 
-  // Matches are played in landscape on touch devices: turning upright pauses the match,
-  // and it resumes, as any pause, only by the player's choice.
   useEffect(() => {
     if (portrait && phase === 'running') gameRef.current?.pause()
   }, [portrait, phase])
@@ -48,16 +48,19 @@ export function GameScreen({ match }: { readonly match: MatchSetup }) {
     const hud = hudRef.current
     if (stage === null || hud === null) return
     let resultTimer: ReturnType<typeof setTimeout> | undefined
+    const testMode = readTestMode()
 
     const game = mountGame({
       stage,
       hud: queryHudElements(hud),
       config: match.config,
+      seed: match.seed,
+      testHooks: testMode.hooks,
+      frozenClock: testMode.frozenClock,
       touch,
       onLoadState: setLoad,
       onPhaseChange: setPhase,
       onMatchEnd: (outcome) => {
-        // Queued at once: it is sent in the background and survives failures and refreshes.
         const result = finishMatch(outcome)
         if (result !== null) enqueue(result)
         resultTimer = setTimeout(showResult, RESULT_DELAY_MS)
@@ -116,7 +119,6 @@ export function GameScreen({ match }: { readonly match: MatchSetup }) {
           </div>
         </div>
 
-        {/* Polite live region: announces phase changes only, never per-frame values. */}
         <p className="visually-hidden" data-hud="status" role="status" aria-live="polite" />
         <TouchControls touch={touch} />
         <p className="hud-help">

@@ -18,10 +18,6 @@ export class Pool<T> {
     this.reset(item)
     this.free.push(item)
   }
-
-  get available(): number {
-    return this.free.length
-  }
 }
 
 export function compactInPlace<T extends { alive: boolean }>(

@@ -3,9 +3,13 @@ import type { InputIntent } from './types'
 
 export const FIXED_STEP_SECONDS = 1 / 60
 
-/** Longest frame fed into the accumulator, so a backgrounded tab cannot spiral. */
 export const MAX_FRAME_SECONDS = 0.25
 
+/**
+ * Advances the simulation in fixed 1/60 s steps through an accumulator, so movement, damage,
+ * cooldowns and spawns do not depend on the frame rate. Frames longer than 0.25 s are
+ * clamped, so a backgrounded tab cannot replay a burst of simulation on return.
+ */
 export class FixedStepRunner {
   private accumulator = 0
   private stepsLastFrame = 0
