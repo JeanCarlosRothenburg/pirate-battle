@@ -9,11 +9,12 @@ src/game/systems  movement, collision, combat, enemy behaviour, obstacle avoidan
 src/game/assets    asset manifest, loading with progress and retry, atlas conversion
 src/game/audio     Web Audio sound bank shared across mounts
 src/game/render    PixiJS views and effects driven by simulation state
-src/game/input     keyboard, pointer and touch sources producing InputIntent (touch pending)
+src/game/input     keyboard, pointer and touch sources producing InputIntent
 src/game/bridge    Pixi lifecycle, HUD publishing, event-driven audio (test instrumentation pending)
-src/ui             React screens, forms, dialogs (pending)
-src/api            typed contracts, Axios client, TanStack Query hooks (pending)
-src/mocks          MSW handlers, fixtures and network scenarios (pending)
+src/ui             React screens, forms, dialogs and app state (zustand)
+src/storage        versioned, schema-validated localStorage persistence
+src/api            typed contracts, Axios client, TanStack Query hooks
+src/mocks          MSW handlers, fixtures, mock database and network scenarios
 ```
 
 `sim/` and `systems/` import no rendering, React, HTTP or browser globals. That boundary
@@ -140,13 +141,110 @@ allocated inside the step, which keeps garbage collection out of the frame budge
 the 95th-percentile frame time stable. `reset()` returns every entity to its pool, so
 repeated match cycles do not grow the heap.
 
+## Screens and app state
+
+React owns the menus, forms and dialogs; the match stays in the simulation. A small zustand
+store (`ui/appStore.ts`) holds the current screen, the saved options, the player id, the last
+result and the setup of the match in progress. Nothing in it changes per frame.
+
+- **Play** freezes the options into a `GameConfig` snapshot and a new match id. The match
+  screen is keyed by that id, so every match mounts a fresh Pixi application and simulation
+  and the previous one is torn down.
+- The game tells React about phase transitions only (`onPhaseChange`) and reports the
+  outcome once (`onMatchEnd`). The HUD keeps updating through direct DOM writes.
+- **Pause** is a native modal `<dialog>`: the page behind it is inert, focus moves to
+  Resume, and Esc, P or Resume continue. Main Menu abandons the match.
+- **End:** the outcome becomes a `MatchResult` (match and player id, date, score, active
+  duration, end reason and the frozen configuration with its fingerprint), the shape the
+  ranking API will receive. It is saved as the last result, and the result screen follows
+  after a 1.5 s pause so the final explosion plays out.
+- **Result screen:** follows `assets/sample_result.png`: "Battle complete", the score up front,
+  then points, time played and end reason on one line. The brief also requires the match's
+  registration state, which the sample does not show, so a discreet line below reports it:
+  registering, registered, or not registered with the reason and a Retry.
+- **Persistence** (`storage/`): every stored value is parsed with a zod schema under a
+  versioned key; missing, corrupted or out-of-range data falls back to defaults rather than
+  breaking the app. Only the result screen is restored after a refresh. Reloading
+  mid-match lands on the menu with nothing recorded.
+- **Menu and Captain's Log:** the main menu follows `assets/sample_menu.png`, with the ranking
+  and match history hidden behind two buttons at the bottom. They open the Captain's Log
+  on the chosen tab. The brief requires control instructions on the main menu and the sample
+  shows none, so they sit there in a disclosure that starts open.
+- **Accessibility:** each screen moves focus to its heading when it opens; the record tabs
+  follow the WAI-ARIA tabs pattern, with arrow keys moving from the focused tab; the Options form reports errors with an alert summary,
+  per-field messages tied through `aria-describedby`, and focus on the first invalid field.
+  Match state is announced through a polite live region on phase changes only.
+- **Menu art:** panels and buttons are the UI atlas pieces drawn as CSS nine-slices
+  (`border-image`), so they scale to any size without stretching their corners. Menu sounds
+  (`ui_*`) are fetched up front but decoded on first use, after a user gesture.
+
+## Ranking and match history
+
+**Contracts** (`api/contracts.ts`) are zod schemas shared by the client, the MSW handlers and
+the tests. A match record carries the match and player ids, date, score, active duration,
+end reason and the configuration used, with its fingerprint.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `PUT /api/matches/:matchId` | Register a completed match. Idempotent: a repeat returns the stored record with `created: false` |
+| `GET /api/ranking?config=&page=&pageSize=` | Ranking for one configuration fingerprint |
+| `GET /api/players/:playerId/matches?page=&pageSize=` | A player's history, newest first |
+
+The ranking only compares matches with the same configuration. Ties are broken
+deterministically: higher score, then less active time, then the earlier match, then the
+match id. Other players come from seeded fixtures.
+
+**Client:** Axios with a 5 s timeout; every response is validated against its schema.
+TanStack Query owns caching (10 s stale time), retries (at most two, with exponential
+backoff, and only for timeouts, connection failures and 5xx; never for 4xx or contract
+violations), and background refreshes. Each tab panel mounts only while shown and refetches
+on mount, so both tabs refresh whenever they reappear. Every page has its own query key, and
+TanStack Query aborts a superseded request for the same key through Axios's signal, so a
+slow, older response can never overwrite newer data. When a refresh fails, the last data
+received stays on screen under an error notice with a retry.
+
+**Registration and pending records:** when a match ends, its record is saved as the last
+result and added to a persisted pending queue in the same step. `SubmissionManager`, mounted
+on every screen, sends queued records through a TanStack mutation in the background, so
+registration never blocks starting another match. A success removes the record from the
+queue and invalidates both tabs; a failure keeps it queued as failed, shown on the result
+screen and the menu with a retry, and retried again when the browser comes back online.
+After a refresh every pending record is sent again. Because the endpoint is idempotent, a
+timed-out request whose record the server did save is recovered by the retry with no
+duplicate, and repeated clicks cannot create a second entry.
+
+**Mocks:** `createMockApi` builds the handlers on a mock database holding the fixtures plus
+the matches this browser registered, persisted to localStorage, so both tabs read one
+consistent store and confirmed records survive a refresh. The same handlers run in a service
+worker in development and in the published build, and under `msw/node` in the unit tests.
+Scenarios add seeded latency or failures per request; the scenario panel and the `?scenario=`
+URL parameter select one, and **Restore initial state** resets data and scenario.
+
+## Touch and orientation
+
+`TouchButtons` holds an action per finger, with pointer capture so lifting, sliding off or a
+cancelled touch releases it; several buttons work at once, so the ship can sail, turn and
+fire together. Like the keyboard, touch input only counts while the match runs, and turn
+buttons override pointer steering. Dragging on the sea steers through `PointerSteering`, and
+the canvas has `touch-action: none` so drags never scroll the page. The buttons appear only
+on devices with a coarse pointer.
+
+Matches are supported in landscape (the brief leaves the orientation to the solution; a 16:9
+arena in portrait would shrink to about a quarter of a phone's width). A touch device turned
+upright pauses the match, and the pause dialog shrinks to a "Turn your device" prompt with
+only Main Menu; turned back, it becomes the normal pause menu, where Resume is still the
+player's choice. The
+rules never change with the screen: the arena is letterboxed into whatever space is
+available, and on short screens the HUD and buttons shrink so nothing is cut off.
+
 ## Input
 
 Input sources write into one reused `InputIntent` each frame; the simulation reads it and
 knows nothing about devices.
 
 - **Keyboard** (`KeyboardInput`): W sails forward, A/D turn, Space and Q/E fire, and
-  commands (Enter, P/Esc, M) arrive as events. Keys are bound by `KeyboardEvent.code`, so
+  commands (P/Esc pause, M mute) arrive as events. Keys are only captured while the match
+  is running (`enabled` follows the phase), so menus and dialogs get every key. Keys are bound by `KeyboardEvent.code`, so
   the layout does not matter.
 - **Pointer** (`PointerSteering`): slither.io-style steering. The pointer position over the
   canvas, in CSS pixels, is converted to arena coordinates through the same letterbox the
@@ -188,6 +286,14 @@ reproducible. Effects advance on frame time but freeze while the match is paused
 steps. `FixedStepRunner.advance` therefore takes an `onStep` callback, and the renderer and
 audio consume each step's events there.
 
+The arena keeps its size and proportions on every screen (it is letterboxed, so input
+coordinates and limits never change), but the sea always fills the whole screen: on each
+resize the water is stretched over the visible area in arena coordinates, with its tile
+pattern anchored to the arena origin so there is no seam at the edge. Beyond the arena the
+sea is dimmed slightly and a thin line marks the limit ships cannot cross. On touch screens
+the buttons sit over that outer sea; held upright, where the match is paused, they are
+hidden.
+
 Islands are drawn over their exact collision circles and rectangles, using the sand and
 grass tiles as repeating patterns. The tile sheet's prebuilt islands only fit shapes that
 are multiples of 64 px, and stretching them tore the art. Ships are long while their
@@ -215,5 +321,9 @@ pause, resume and end. Ocean and sailing loops play while the match runs. M togg
 - Arena walls are handled by clamping. They slide like any axis-aligned surface but report
   no contact normal or scrape event.
 - Sounds ship as the provided WAV files (about 5 MB). Compressing them is a pending optimisation.
+- The mock API's data lives in the browser: records registered on one device are not visible
+  on another.
+- Out-of-order responses are handled per query key; the out-of-order scenario demonstrates
+  it, but there is no server-side versioning because there is no real server.
 - Cooldowns are quantised to the fixed step, so the observed fire rate can fall one shot
   short of the continuous-time ideal over a long window. It never exceeds it.

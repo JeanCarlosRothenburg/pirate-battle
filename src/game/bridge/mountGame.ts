@@ -8,9 +8,11 @@ import type { GameConfig } from '../config/gameConfig'
 import { KeyboardInput } from '../input/keyboard'
 import type { InputCommand } from '../input/keyboard'
 import { PointerSteering } from '../input/pointer'
+import type { TouchButtons } from '../input/touch'
 import { ArenaRenderer } from '../render/arenaRenderer'
 import { FixedStepRunner, MAX_FRAME_SECONDS } from '../sim/loop'
 import { Simulation } from '../sim/simulation'
+import type { EndReason, MatchPhase } from '../sim/types'
 import { GameAudio } from './gameAudio'
 import { HUD_PUBLISH_INTERVAL_MS, HudPublisher } from './hud'
 import type { HudElements } from './hud'
@@ -26,8 +28,21 @@ export interface MountGameOptions {
   readonly config?: GameConfig
   /** Seed for each new match. Defaults to a random seed per match. */
   readonly nextSeed?: () => number
-  /** Reports asset loading; the match cannot start until it reports `ready`. */
+  /** On-screen touch buttons, merged with the keyboard. */
+  readonly touch?: TouchButtons
+  /** Reports asset loading; the match starts as soon as it reports `ready`. */
   readonly onLoadState?: (state: LoadState) => void
+  /** Called on every phase transition (never per frame). */
+  readonly onPhaseChange?: (phase: MatchPhase) => void
+  /** Called once when the match ends by time or death. Abandoned matches never call it. */
+  readonly onMatchEnd?: (outcome: MatchOutcome) => void
+}
+
+export interface MatchOutcome {
+  readonly score: number
+  /** Seconds of active play; pauses do not count. */
+  readonly durationSeconds: number
+  readonly endReason: EndReason
 }
 
 export interface GameHandle {
@@ -35,8 +50,12 @@ export interface GameHandle {
   destroy(): void
   /** Retries asset loading after an `error` load state. */
   retry(): void
-  /** Sends a command as if its key had been pressed, e.g. from an on-screen button. */
-  command(command: InputCommand): void
+  /** Pauses a running match, e.g. from the on-screen button. */
+  pause(): void
+  /** Resumes a paused match. Resuming always takes an explicit player action. */
+  resume(): void
+  /** Toggles game sound; returns whether it is now muted. */
+  toggleMute(): boolean
 }
 
 /**
@@ -105,15 +124,23 @@ export function mountGame(options: MountGameOptions): GameHandle {
     retry() {
       if (!destroyed && game === null) load()
     },
-    command(command) {
-      game?.command(command)
+    pause() {
+      game?.pause()
+    },
+    resume() {
+      game?.resume()
+    },
+    toggleMute() {
+      return game?.toggleMute() ?? false
     },
   }
 }
 
 interface RunningGame {
   teardown(): void
-  command(command: InputCommand): void
+  pause(): void
+  resume(): void
+  toggleMute(): boolean
 }
 
 function startGame(app: Application, assets: GameAssets, options: MountGameOptions): RunningGame {
@@ -142,44 +169,54 @@ function startGame(app: Application, assets: GameAssets, options: MountGameOptio
     audio.onStep(s)
   }
 
-  const resume = (): void => {
-    // Drop the accumulated time so the paused period is not replayed as movement.
-    runner.clear()
-    sim.resume()
-  }
-
-  const command = (cmd: InputCommand): void => {
-    // Commands come from user gestures, the moment browsers allow audio to start.
-    sounds.unlock()
-    if (cmd === 'toggleMute') {
-      audio.toggleMute()
-      return
-    }
-    if (cmd === 'confirm') {
-      if (sim.phase === 'idle' || sim.phase === 'ended') {
-        sim.reset(nextSeed())
-        sim.start()
-        runner.clear()
-        renderer.reset()
-      } else if (sim.phase === 'paused') {
-        resume()
-      }
-    } else if (sim.phase === 'running') {
-      sim.pause()
-    } else if (sim.phase === 'paused') {
-      resume()
-    }
+  // Every phase change goes through here: it gates keyboard capture and informs the UI.
+  let phase: MatchPhase = sim.phase
+  const syncPhase = (): void => {
+    if (sim.phase === phase) return
+    phase = sim.phase
+    input.enabled = phase === 'running'
+    if (options.touch) options.touch.enabled = phase === 'running'
     publishHud()
+    options.onPhaseChange?.(phase)
+    if (phase === 'ended' && sim.endReason !== null) {
+      options.onMatchEnd?.({
+        score: sim.score,
+        durationSeconds: sim.elapsedSeconds,
+        endReason: sim.endReason,
+      })
+    }
   }
-  input.onCommand = command
 
-  // Losing focus or hiding the tab pauses the match; only an explicit player action resumes it.
-  const autoPause = (): void => {
+  const pause = (): void => {
     if (!sim.isActive) return
     sim.pause()
     input.clear()
-    publishHud()
+    options.touch?.releaseAll()
+    syncPhase()
   }
+
+  const resume = (): void => {
+    if (sim.phase !== 'paused') return
+    // Commands come from user gestures, the moment browsers allow audio to start.
+    sounds.unlock()
+    // Drop the accumulated time so the paused period is not replayed as movement.
+    runner.clear()
+    sim.resume()
+    syncPhase()
+  }
+
+  const toggleMute = (): boolean => {
+    sounds.unlock()
+    return audio.toggleMute()
+  }
+
+  input.onCommand = (cmd: InputCommand): void => {
+    if (cmd === 'pause') pause()
+    else toggleMute()
+  }
+
+  // Losing focus or hiding the tab pauses the match; only an explicit player action resumes it.
+  const autoPause = pause
   const onVisibilityChange = (): void => {
     if (document.hidden) autoPause()
   }
@@ -193,12 +230,14 @@ function startGame(app: Application, assets: GameAssets, options: MountGameOptio
     // Outside `running` the simulation does not step, so prev/current transforms are
     // stale relative to each other; render the current state rather than interpolating.
     const intent = input.read()
+    options.touch?.apply(intent)
     pointer.apply(intent, renderer.letterbox)
     const alpha = sim.isActive ? runner.advance(sim, frameMs / 1000, intent, onStep) : 1
     // Effects keep playing after the match ends, but freeze with it while paused.
     renderer.update(Math.min(frameMs / 1000, MAX_FRAME_SECONDS), sim.phase !== 'paused')
     renderer.sync(sim, alpha)
     audio.onFrame(sim)
+    syncPhase()
 
     hudElapsedMs += frameMs
     if (hudElapsedMs >= HUD_PUBLISH_INTERVAL_MS) {
@@ -208,11 +247,16 @@ function startGame(app: Application, assets: GameAssets, options: MountGameOptio
   }
   app.ticker.add(tick)
 
-  publishHud()
   options.stage.appendChild(app.canvas)
+  // The Play action that mounted this game is the start command: sail at once.
+  sounds.unlock()
+  sim.start()
+  syncPhase()
 
   return {
-    command,
+    pause,
+    resume,
+    toggleMute,
     teardown() {
       app.ticker.remove(tick)
       app.renderer.off('resize', fit)

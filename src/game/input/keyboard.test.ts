@@ -12,6 +12,7 @@ describe('KeyboardInput', () => {
   beforeEach(() => {
     target = new EventTarget()
     input = new KeyboardInput(target)
+    input.enabled = true
   })
 
   afterEach(() => input.dispose())
@@ -65,10 +66,28 @@ describe('KeyboardInput', () => {
   it('emits commands once per press, ignoring auto-repeat', () => {
     const commands: InputCommand[] = []
     input.onCommand = (command) => commands.push(command)
-    target.dispatchEvent(key('keydown', 'Enter'))
-    target.dispatchEvent(key('keydown', 'Enter', true))
     target.dispatchEvent(key('keydown', 'KeyP'))
-    expect(commands).toEqual(['confirm', 'togglePause'])
+    target.dispatchEvent(key('keydown', 'KeyP', true))
+    target.dispatchEvent(key('keydown', 'Escape'))
+    target.dispatchEvent(key('keydown', 'KeyM'))
+    expect(commands).toEqual(['pause', 'pause', 'toggleMute'])
+  })
+
+  it('captures nothing while disabled, leaving keys to menus and dialogs', () => {
+    const commands: InputCommand[] = []
+    input.onCommand = (command) => commands.push(command)
+    target.dispatchEvent(key('keydown', 'KeyW'))
+    input.enabled = false
+    expect(input.read().throttle).toBe(0)
+
+    const space = key('keydown', 'Space')
+    const escape = key('keydown', 'Escape')
+    target.dispatchEvent(space)
+    target.dispatchEvent(escape)
+    expect(space.defaultPrevented).toBe(false)
+    expect(escape.defaultPrevented).toBe(false)
+    expect(commands).toEqual([])
+    expect(input.read().fireFront).toBe(false)
   })
 
   it('stops listening after dispose', () => {

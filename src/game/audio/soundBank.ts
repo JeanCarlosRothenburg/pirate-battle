@@ -19,6 +19,19 @@ export function getAudioContext(): AudioContext | null {
   return sharedContext
 }
 
+let pageMuted = false
+const muteListeners = new Set<(muted: boolean) => void>()
+
+/** One mute switch for the page: menus and matches share it. */
+export function isAudioMuted(): boolean {
+  return pageMuted
+}
+
+export function setAudioMuted(muted: boolean): void {
+  pageMuted = muted
+  for (const listener of muteListeners) listener(muted)
+}
+
 interface ActiveLoop {
   readonly source: AudioBufferSourceNode
   readonly gain: GainNode
@@ -31,7 +44,7 @@ interface ActiveLoop {
 export class SoundBank {
   private readonly master: GainNode | null
   private readonly loops = new Map<GameSound, ActiveLoop>()
-  private muted = false
+  private readonly onMute = (muted: boolean): void => this.applyMute(muted)
 
   constructor(
     private readonly context: AudioContext | null,
@@ -39,10 +52,12 @@ export class SoundBank {
   ) {
     this.master = context?.createGain() ?? null
     if (context !== null && this.master !== null) this.master.connect(context.destination)
+    this.applyMute(pageMuted)
+    muteListeners.add(this.onMute)
   }
 
   get isMuted(): boolean {
-    return this.muted
+    return pageMuted
   }
 
   /** Must run inside a user gesture: browsers start contexts suspended until then. */
@@ -51,10 +66,7 @@ export class SoundBank {
   }
 
   setMuted(muted: boolean): void {
-    this.muted = muted
-    if (this.master !== null && this.context !== null) {
-      this.master.gain.setValueAtTime(muted ? 0 : 1, this.context.currentTime)
-    }
+    setAudioMuted(muted)
   }
 
   play(name: GameSound, volume = 1): void {
@@ -86,8 +98,15 @@ export class SoundBank {
   }
 
   dispose(): void {
+    muteListeners.delete(this.onMute)
     for (const name of [...this.loops.keys()]) this.stopLoop(name)
     this.master?.disconnect()
+  }
+
+  private applyMute(muted: boolean): void {
+    if (this.master !== null && this.context !== null) {
+      this.master.gain.setValueAtTime(muted ? 0 : 1, this.context.currentTime)
+    }
   }
 
   private createSource(name: GameSound, volume: number): ActiveLoop | null {

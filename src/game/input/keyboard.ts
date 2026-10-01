@@ -2,7 +2,7 @@ import { NEUTRAL_INTENT } from '../sim/types'
 import type { MutableIntent } from '../sim/types'
 
 type HeldAction = 'forward' | 'left' | 'right' | 'fireFront' | 'fireLeft' | 'fireRight'
-export type InputCommand = 'confirm' | 'togglePause' | 'toggleMute'
+export type InputCommand = 'pause' | 'toggleMute'
 
 /** Bound by physical key position (`KeyboardEvent.code`), so WASD works on any layout. */
 const HELD_BINDINGS: Readonly<Record<string, HeldAction>> = {
@@ -18,19 +18,22 @@ const HELD_BINDINGS: Readonly<Record<string, HeldAction>> = {
 }
 
 const COMMAND_BINDINGS: Readonly<Record<string, InputCommand>> = {
-  Enter: 'confirm',
-  NumpadEnter: 'confirm',
-  KeyP: 'togglePause',
-  Escape: 'togglePause',
+  KeyP: 'pause',
+  Escape: 'pause',
   KeyM: 'toggleMute',
 }
 
 /**
  * Tracks held keys and folds them into an `InputIntent`. `read()` reuses one object,
  * so polling it every frame allocates nothing.
+ *
+ * Game keys are only captured while `enabled`: while a match is paused, over or not yet
+ * started, every key reaches the page untouched, so menus and dialogs work normally.
  */
 export class KeyboardInput {
   onCommand: ((command: InputCommand) => void) | null = null
+
+  private active = false
 
   private readonly held = new Set<HeldAction>()
   private readonly intent: MutableIntent = { ...NEUTRAL_INTENT }
@@ -58,6 +61,15 @@ export class KeyboardInput {
     return this.intent
   }
 
+  get enabled(): boolean {
+    return this.active
+  }
+
+  set enabled(value: boolean) {
+    this.active = value
+    if (!value) this.held.clear()
+  }
+
   /** Releases every held key, e.g. when the window loses focus mid-press. */
   readonly clear = (): void => {
     this.held.clear()
@@ -73,7 +85,7 @@ export class KeyboardInput {
 
   private readonly handleKeyDown = (event: Event): void => {
     const key = event as KeyboardEvent
-    if (isEditableTarget(key.target)) return
+    if (!this.active || isEditableTarget(key.target)) return
 
     const action = HELD_BINDINGS[key.code]
     if (action !== undefined) {

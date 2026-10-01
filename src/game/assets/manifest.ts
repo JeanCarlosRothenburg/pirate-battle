@@ -80,3 +80,14 @@ export function soundUrl(name: GameSound): string {
   if (url === undefined) throw new Error(`Missing sound asset: ${name}.wav`)
   return url
 }
+
+/** Menu sounds, loaded on their own so the menus never wait for the match assets. */
+export const UI_SOUNDS = ['ui_back', 'ui_click', 'ui_close', 'ui_hover', 'ui_open'] as const
+
+export type UiSound = (typeof UI_SOUNDS)[number]
+
+export function uiSoundUrl(name: UiSound): string {
+  const url = soundUrls[`../../../assets/sounds/${name}.wav`]
+  if (url === undefined) throw new Error(`Missing sound asset: ${name}.wav`)
+  return url
+}

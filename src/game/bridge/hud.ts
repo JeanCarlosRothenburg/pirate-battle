@@ -65,11 +65,11 @@ export class HudPublisher {
       this.el.enemies.textContent = String(s.enemyCount)
     }
 
+    // A polite live region: it only changes on phase transitions, never per frame.
     const status = statusText(s)
     if (status !== this.status) {
       this.status = status
       this.el.status.textContent = status
-      this.el.status.hidden = status === ''
     }
   }
 }
@@ -77,15 +77,13 @@ export class HudPublisher {
 function statusText(s: HudSnapshot): string {
   switch (s.phase) {
     case 'idle':
-      return 'Press Enter to set sail'
-    case 'running':
       return ''
+    case 'running':
+      return 'Match running.'
     case 'paused':
-      return 'Paused. Press P or Esc to resume'
-    case 'ended': {
-      const headline = s.endReason === 'death' ? 'Your ship sank' : "Time's up"
-      return `${headline}. Score ${s.score}. Press Enter to play again`
-    }
+      return 'Match paused.'
+    case 'ended':
+      return `${s.endReason === 'death' ? 'Your ship sank' : "Time's up"}. Final score ${s.score}.`
   }
 }
 

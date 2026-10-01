@@ -44,6 +44,8 @@ body {
 
 .game-stage canvas {
   display: block;
+  /* Dragging on the sea steers; it must not scroll or zoom the page. */
+  touch-action: none;
 }
 
 /* ------------------------------------------------------------------ HUD */
@@ -234,21 +236,9 @@ body {
   height: 26px;
 }
 
-.hud-status {
-  align-self: center;
-  margin: auto 0;
-  padding: 16px 28px;
-  border: 3px solid #b8793a;
-  border-radius: 12px;
-  background: rgb(38 24 14 / 0.88);
-  font-size: 22px;
-  font-weight: 700;
-  text-align: center;
-}
-
 .hud-help {
   align-self: center;
-  margin: 0;
+  margin: auto 0 0;
   padding: 4px 12px;
   border-radius: 6px;
   background: rgb(6 38 58 / 0.6);
@@ -256,9 +246,6 @@ body {
   text-align: center;
 }
 
-.hud-status[hidden] + .hud-help {
-  margin-top: auto;
-}
 
 /* -------------------------------------------------------------- loading */
 
@@ -343,4 +330,1062 @@ body {
 .loading-retry:focus-visible {
   outline: 3px solid #ffd35c;
   outline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------- menus */
+
+:focus-visible {
+  outline: 3px solid #ffd35c;
+  outline-offset: 3px;
+}
+
+/*
+ * Screen headings take focus when a screen opens, so screen readers start there. They are
+ * not controls and not in the tab order, so they get no focus ring.
+ */
+[tabindex='-1']:focus {
+  outline: none;
+}
+
+.menu-screen {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  background:
+    linear-gradient(rgb(6 38 58 / 0.55), rgb(6 38 58 / 0.55)),
+    url('../../assets/ui_scene_background.png') center / cover no-repeat,
+    #0b4f7a;
+}
+
+body:has(.menu-screen) {
+  overflow: auto;
+}
+
+/* The menu panel art as a nine-slice, so panels of any size keep their brass corners. */
+.panel {
+  border: 36px solid transparent;
+  border-image: image-set(
+      url('../../assets/png/default/ui/menu/panel_menu.png') 1x,
+      url('../../assets/png/retina/ui/menu/panel_menu.png') 2x
+    )
+    48 fill / 36px stretch;
+  color: #fff8e6;
+}
+
+.menu-title {
+  margin: 0;
+  line-height: 0;
+}
+
+.menu-title img {
+  width: min(320px, 100%);
+  height: auto;
+}
+
+.menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel-title,
+.panel-heading {
+  margin: 0 0 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.panel-title {
+  font-size: 26px;
+  text-align: center;
+}
+
+.panel-heading {
+  font-size: 15px;
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.menu-button {
+  min-width: 200px;
+  min-height: 60px;
+  padding: 0 16px;
+  border: 20px solid transparent;
+  border-image: image-set(
+      url('../../assets/png/default/ui/menu/button_primary_normal.png') 1x,
+      url('../../assets/png/retina/ui/menu/button_primary_normal.png') 2x
+    )
+    40 fill / 20px stretch;
+  background: none;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.menu-button-primary {
+  color: #3a2208;
+  text-shadow: 0 1px 0 rgb(255 240 200 / 0.6);
+}
+
+.menu-button-primary:hover:not(:disabled) {
+  border-image-source: image-set(
+    url('../../assets/png/default/ui/menu/button_primary_hover.png') 1x,
+    url('../../assets/png/retina/ui/menu/button_primary_hover.png') 2x
+  );
+}
+
+.menu-button-primary:active:not(:disabled) {
+  border-image-source: image-set(
+    url('../../assets/png/default/ui/menu/button_primary_pressed.png') 1x,
+    url('../../assets/png/retina/ui/menu/button_primary_pressed.png') 2x
+  );
+}
+
+.menu-button-primary:disabled {
+  color: #3d3d3d;
+  text-shadow: none;
+  cursor: not-allowed;
+  border-image-source: image-set(
+    url('../../assets/png/default/ui/menu/button_primary_disabled.png') 1x,
+    url('../../assets/png/retina/ui/menu/button_primary_disabled.png') 2x
+  );
+}
+
+.menu-button-secondary {
+  color: #fff8e6;
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.5);
+  border-image-source: image-set(
+    url('../../assets/png/default/ui/menu/button_secondary_normal.png') 1x,
+    url('../../assets/png/retina/ui/menu/button_secondary_normal.png') 2x
+  );
+}
+
+.menu-button-secondary:hover {
+  filter: brightness(1.15);
+}
+
+.menu-button-secondary:active,
+.menu-button-secondary[aria-pressed='true'] {
+  border-image-source: image-set(
+    url('../../assets/png/default/ui/menu/button_secondary_pressed.png') 1x,
+    url('../../assets/png/retina/ui/menu/button_secondary_pressed.png') 2x
+  );
+}
+
+/* ---------------------------------------------------------------- tabs */
+
+/* -------------------------------------------------------------- controls */
+
+.controls-help {
+  width: 100%;
+}
+
+.controls-help dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.controls-row {
+  display: grid;
+  grid-template-columns: 9em 1fr;
+  gap: 8px;
+}
+
+.controls-row dt {
+  font-weight: 700;
+  color: #ffd35c;
+}
+
+.controls-row dd {
+  margin: 0;
+}
+
+/* ----------------------------------------------------------------- forms */
+
+.options-panel {
+  width: min(100%, 520px);
+}
+
+.form-field {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.form-field label {
+  font-weight: 700;
+}
+
+.form-field input {
+  padding: 10px 12px;
+  border: 2px solid #b8793a;
+  border-radius: 8px;
+  background: #0f1c28;
+  color: #fff8e6;
+  font: inherit;
+  font-size: 16px;
+}
+
+.form-field input[aria-invalid='true'] {
+  border-color: #ff8a7a;
+}
+
+.form-hint,
+.form-note,
+.pause-note {
+  margin: 0;
+  font-size: 13px;
+  color: #d9cdb0;
+}
+
+.form-error {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffb3a8;
+}
+
+.form-summary {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgb(160 40 30 / 0.45);
+  font-weight: 700;
+}
+
+.form-status {
+  min-height: 1.4em;
+  margin: 0 0 8px;
+  font-weight: 700;
+  color: #a8f0a0;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin: 8px 0 12px;
+}
+
+.form-actions .menu-button {
+  min-width: 150px;
+}
+
+/* ---------------------------------------------------------------- result */
+
+/* ---------------------------------------------------------------- pause */
+
+.pause-dialog {
+  width: min(92vw, 480px);
+  padding: 0;
+  background: none;
+  text-align: center;
+}
+
+.pause-dialog::backdrop {
+  background: rgb(4 20 32 / 0.6);
+}
+
+.pause-dialog .form-actions {
+  flex-direction: column;
+  align-items: center;
+}
+
+/* --------------------------------------------------------------- records */
+
+.records {
+  display: grid;
+  gap: 2px;
+}
+
+.query-refreshing {
+  min-height: 1em;
+  font-size: 12px;
+  text-align: center;
+}
+
+.query-error {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.query-error p {
+  margin: 0;
+  font-weight: 700;
+  color: #ffb3a8;
+}
+
+.records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.records-table[aria-busy='true'] {
+  opacity: 0.6;
+}
+
+.page-button {
+  padding: 6px 14px;
+  border: 2px solid #b8793a;
+  border-radius: 8px;
+  background: #0f1c28;
+  color: #fff8e6;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.page-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pending-notice {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgb(184 121 58 / 0.25);
+  font-size: 14px;
+}
+
+.submission-failed {
+  color: #ffb3a8;
+}
+
+.network-panel {
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.network-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #d9cdb0;
+}
+
+.network-panel select {
+  padding: 8px;
+  border: 2px solid #b8793a;
+  border-radius: 8px;
+  background: #0f1c28;
+  color: #fff8e6;
+  font: inherit;
+}
+
+/* ----------------------------------------------------------------- touch */
+
+.touch-controls {
+  display: none;
+}
+
+.rotate-note {
+  margin: 0 0 4px;
+  font-weight: 700;
+  color: #ffd35c;
+}
+
+/* A phone outline turned on its side, drawn in CSS: the assets have no rotation icon. */
+.rotate-icon {
+  display: block;
+  width: 34px;
+  height: 56px;
+  margin: 6px auto 14px;
+  border: 4px solid #fde8b4;
+  border-radius: 8px;
+  animation: rotate-hint 2.4s ease-in-out infinite;
+}
+
+@keyframes rotate-hint {
+  0%,
+  30% {
+    transform: rotate(0deg);
+  }
+  60%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate-icon {
+    animation: none;
+    transform: rotate(-90deg);
+  }
+}
+
+/* Only devices with a coarse pointer (touch) get the on-screen buttons. */
+@media (any-pointer: coarse) {
+  .touch-controls {
+    position: absolute;
+    inset: auto 0 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+    pointer-events: none;
+  }
+
+  .hud-help {
+    display: none;
+  }
+}
+
+.touch-cluster {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  grid-template-rows: 64px 64px;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+/* The middle button sits one row higher, like the reference layout. */
+.touch-cluster > :nth-child(1) {
+  grid-area: 2 / 1;
+}
+
+.touch-cluster > :nth-child(2) {
+  grid-area: 1 / 2;
+}
+
+.touch-cluster > :nth-child(3) {
+  grid-area: 2 / 3;
+}
+
+.touch-button {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: image-set(
+      url('../../assets/png/default/ui/controls/button_round_normal.png') 1x,
+      url('../../assets/png/retina/ui/controls/button_round_normal.png') 2x
+    )
+    center / contain no-repeat;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.touch-button:active {
+  background-image: image-set(
+    url('../../assets/png/default/ui/controls/button_round_pressed.png') 1x,
+    url('../../assets/png/retina/ui/controls/button_round_pressed.png') 2x
+  );
+}
+
+.touch-button .hud-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.touch-icon-turn-left {
+  background-image: image-set(
+    url('../../assets/png/default/ui/controls/icon_turn_left.png') 1x,
+    url('../../assets/png/retina/ui/controls/icon_turn_left.png') 2x
+  );
+}
+
+.touch-icon-forward {
+  background-image: image-set(
+    url('../../assets/png/default/ui/controls/icon_forward.png') 1x,
+    url('../../assets/png/retina/ui/controls/icon_forward.png') 2x
+  );
+}
+
+.touch-icon-turn-right {
+  background-image: image-set(
+    url('../../assets/png/default/ui/controls/icon_turn_right.png') 1x,
+    url('../../assets/png/retina/ui/controls/icon_turn_right.png') 2x
+  );
+}
+
+.touch-icon-fire-left {
+  background-image: image-set(
+    url('../../assets/png/default/ui/controls/icon_fire_left.png') 1x,
+    url('../../assets/png/retina/ui/controls/icon_fire_left.png') 2x
+  );
+}
+
+.touch-icon-fire-front {
+  background-image: image-set(
+    url('../../assets/png/default/ui/controls/icon_fire_front.png') 1x,
+    url('../../assets/png/retina/ui/controls/icon_fire_front.png') 2x
+  );
+}
+
+.touch-icon-fire-right {
+  background-image: image-set(
+    url('../../assets/png/default/ui/controls/icon_fire_right.png') 1x,
+    url('../../assets/png/retina/ui/controls/icon_fire_right.png') 2x
+  );
+}
+
+/* Phones in landscape are short: shrink the HUD and buttons so nothing is cut off. */
+@media (max-height: 520px) {
+  .hud-top,
+  .touch-controls {
+    zoom: 0.72;
+  }
+}
+
+/* ------------------------------------------------- main menu (sample_menu) */
+
+.menu-main {
+  width: min(100%, 600px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.menu-tagline {
+  margin: -4px 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #d9cdb0;
+}
+
+.menu-button-large {
+  min-width: min(300px, 70vw);
+  min-height: 70px;
+  font-size: 24px;
+}
+
+.menu-ship {
+  width: 34px;
+  height: auto;
+  margin-top: 4px;
+}
+
+.menu-motto {
+  margin: 0;
+  font-size: 14px;
+  color: #d9cdb0;
+}
+
+.menu-controls {
+  width: 100%;
+  text-align: left;
+}
+
+.menu-controls summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #ffd35c;
+  text-align: center;
+}
+
+.menu-controls .controls-help {
+  margin-top: 10px;
+}
+
+.menu-controls .controls-help dl {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 4px 20px;
+  font-size: 13px;
+}
+
+.menu-controls .controls-row {
+  grid-template-columns: 7.5em 1fr;
+}
+
+.menu-records-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.menu-button-small {
+  min-width: 190px;
+  min-height: 52px;
+  font-size: 15px;
+}
+
+/* ---------------------------------- Captain's Log (sample_ranking/history) */
+
+.records-panel {
+  width: min(100%, 1100px);
+}
+
+.records-panel .panel-title {
+  font-size: 34px;
+  text-transform: uppercase;
+}
+
+.tab-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.tab {
+  min-width: 200px;
+  min-height: 56px;
+  padding: 0 12px;
+  border: 20px solid transparent;
+  border-image: image-set(
+      url('../../assets/png/default/ui/menu/button_secondary_normal.png') 1x,
+      url('../../assets/png/retina/ui/menu/button_secondary_normal.png') 2x
+    )
+    40 fill / 20px stretch;
+  background: none;
+  color: #fff8e6;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.5);
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  border-image-source: image-set(
+    url('../../assets/png/default/ui/menu/button_primary_normal.png') 1x,
+    url('../../assets/png/retina/ui/menu/button_primary_normal.png') 2x
+  );
+  color: #3a2208;
+  text-shadow: 0 1px 0 rgb(255 240 200 / 0.6);
+}
+
+.tab-panel {
+  padding: 0 4px;
+}
+
+.records-scope {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+  color: #d9cdb0;
+}
+
+.records-table {
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
+
+.records-table th {
+  padding: 4px 14px;
+  border: 0;
+  color: #d9cdb0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.records-table td {
+  padding: 14px;
+  border: 0;
+  background: #142233;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.records-table td:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.records-table td:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.records-table tr.is-highlighted td {
+  background: #4a4532;
+  box-shadow: inset 0 1px 0 rgb(255 211 92 / 0.35), inset 0 -1px 0 rgb(255 211 92 / 0.35);
+}
+
+.records-rank,
+.records-points {
+  color: #ffd35c;
+}
+
+.records-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.records-star {
+  width: 24px;
+  height: 24px;
+}
+
+.you-tag {
+  padding: 1px 6px;
+  border: 1px solid #ffd35c;
+  border-radius: 4px;
+  color: #ffd35c;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.records-date {
+  font-size: 13px;
+  color: #d9cdb0;
+}
+
+.records-day {
+  font-size: 16px;
+  color: #fff8e6;
+}
+
+.records-result {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.records-result.is-time {
+  color: #b8f0a8;
+}
+
+.records-result.is-death {
+  color: #ffb3a8;
+}
+
+.pagination {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  margin: 4px 0 8px;
+}
+
+.page-indicator {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.round-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: image-set(
+      url('../../assets/png/default/ui/controls/button_round_normal.png') 1x,
+      url('../../assets/png/retina/ui/controls/button_round_normal.png') 2x
+    )
+    center / contain no-repeat;
+  cursor: pointer;
+}
+
+.round-button:hover:not(:disabled) {
+  background-image: image-set(
+    url('../../assets/png/default/ui/controls/button_round_hover.png') 1x,
+    url('../../assets/png/retina/ui/controls/button_round_hover.png') 2x
+  );
+}
+
+.round-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.round-button .hud-icon {
+  width: 20px;
+  height: 20px;
+}
+
+@media (max-width: 640px) {
+  .records-table td,
+  .records-table th {
+    padding: 10px 8px;
+    font-size: 14px;
+  }
+}
+
+/*
+ * The main menu must fit the screen without scrolling. Everything on it is required (title,
+ * Play, Options, control instructions, records buttons), so short screens compact it, drop
+ * the purely decorative ship and motto, and phones in landscape split it into two columns.
+ */
+@media (max-height: 820px), (max-width: 520px) {
+  .menu-screen:has(.menu-main) {
+    padding-block: 10px;
+  }
+
+  .menu-main.panel {
+    border-width: 28px;
+    border-image-width: 28px;
+  }
+
+  .menu-main {
+    gap: 9px;
+  }
+
+  .menu-title img {
+    width: min(250px, 100%);
+  }
+
+  .menu-tagline {
+    margin: -6px 0 0;
+    font-size: 12px;
+  }
+
+  .menu-button-large {
+    min-height: 56px;
+    font-size: 20px;
+  }
+
+  .menu-ship {
+    width: 24px;
+    margin-top: 0;
+  }
+
+  .menu-records-actions {
+    margin-top: 0;
+  }
+
+  .menu-button-small {
+    min-height: 46px;
+  }
+}
+
+@media (max-height: 560px) {
+  .menu-ship,
+  .menu-motto {
+    display: none;
+  }
+}
+
+@media (max-height: 500px) and (min-width: 700px) {
+  .menu-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+    grid-template-areas:
+      'title controls'
+      'tagline controls'
+      'actions controls'
+      'pending records';
+    align-items: center;
+    column-gap: 24px;
+    row-gap: 6px;
+    width: min(100%, 880px);
+  }
+
+  .menu-title {
+    grid-area: title;
+  }
+
+  .menu-title img {
+    width: min(210px, 100%);
+  }
+
+  .menu-tagline {
+    grid-area: tagline;
+    margin: 0;
+  }
+
+  .menu-actions {
+    grid-area: actions;
+    gap: 8px;
+  }
+
+  .menu-main .menu-button-large {
+    min-width: 0;
+    width: 100%;
+    min-height: 48px;
+    font-size: 18px;
+  }
+
+  .menu-controls {
+    grid-area: controls;
+    align-self: start;
+  }
+
+  .menu-controls .controls-help dl {
+    grid-template-columns: 1fr;
+    gap: 2px;
+    font-size: 12px;
+  }
+
+  .menu-main .pending-notice {
+    grid-area: pending;
+  }
+
+  .menu-records-actions {
+    grid-area: records;
+    gap: 10px;
+  }
+
+  .menu-button-small {
+    min-width: 150px;
+    min-height: 42px;
+    font-size: 13px;
+  }
+}
+
+/* The Captain's Log also fits short screens without scrolling. */
+@media (max-height: 820px) {
+  .menu-screen:has(.records-panel) {
+    padding-block: 10px;
+  }
+
+  .records-panel.panel {
+    border-width: 28px;
+    border-image-width: 28px;
+  }
+
+  .records-panel .panel-title {
+    margin-bottom: 6px;
+    font-size: 26px;
+  }
+
+  .records-panel .tab-list {
+    margin-bottom: 6px;
+  }
+
+  .records-panel .tab {
+    min-height: 46px;
+    font-size: 15px;
+  }
+
+  .records-panel .records-table {
+    border-spacing: 0 5px;
+  }
+
+  .records-panel .records-table td {
+    padding: 9px 14px;
+  }
+
+  .records-panel .form-actions {
+    margin: 2px 0 6px;
+  }
+
+  .records-panel .menu-button {
+    min-height: 50px;
+  }
+}
+
+/* Upright, the match is paused until the device turns; the buttons would not fit anyway. */
+@media (orientation: portrait) {
+  .touch-controls {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------- result (sample_result) */
+
+.result-panel {
+  width: min(100%, 740px);
+  min-height: min(560px, calc(100vh - 40px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.result-title {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 36px);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fde8b4;
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.45);
+}
+
+.result-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+
+.result-score {
+  font-size: clamp(56px, 9vw, 76px);
+  font-weight: 800;
+  line-height: 1;
+  color: #ffd35c;
+  text-shadow: 0 3px 0 rgb(0 0 0 / 0.4);
+  font-variant-numeric: tabular-nums;
+}
+
+.result-details {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.result-record {
+  margin: 0;
+  font-size: 13px;
+  color: #d9cdb0;
+}
+
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+@media (max-height: 520px) {
+  .menu-screen:has(.result-panel) {
+    padding-block: 10px;
+  }
+
+  .result-panel.panel {
+    min-height: 0;
+    gap: 6px;
+    border-width: 28px;
+    border-image-width: 28px;
+  }
+
+  .result-score {
+    font-size: 52px;
+  }
+
+  .result-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 4px;
+  }
+
+  .result-actions .menu-button-large {
+    min-width: 220px;
+    min-height: 48px;
+    font-size: 18px;
+  }
 }

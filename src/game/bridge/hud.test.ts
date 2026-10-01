@@ -60,7 +60,7 @@ describe('HudPublisher', () => {
     expect(el.hpFill.vars['--hp']).toBe('0.8')
     expect(el.hpFill.dataset['level']).toBe('high')
     expect(el.enemies.textContent).toBe('4')
-    expect(el.status.hidden).toBe(true)
+    expect(el.status.textContent).toBe('Match running.')
   })
 
   it('skips DOM writes when displayed values are unchanged', () => {
@@ -76,8 +76,7 @@ describe('HudPublisher', () => {
   it('shows the end-of-match message with the final score', () => {
     const el = fakeHud()
     new HudPublisher(el).publish({ ...base, phase: 'ended', endReason: 'death', score: 7 })
-    expect(el.status.hidden).toBe(false)
     expect(el.status.textContent).toContain('sank')
-    expect(el.status.textContent).toContain('Score 7')
+    expect(el.status.textContent).toContain('Final score 7')
   })
 })
