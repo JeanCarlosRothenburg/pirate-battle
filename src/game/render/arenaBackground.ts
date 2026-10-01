@@ -12,16 +12,28 @@ const SAND_EDGE = 0xc49a5c
 const GRASS_EDGE = 0x4d8a36
 const SHALLOW_WIDTH = 22
 const WATER_DRIFT = { x: 7, y: 4 } as const
+/** The sea beyond the arena is dimmed slightly, so the sailing limit stays readable. */
+const OUTSIDE_DIM = { color: 0x041c2c, alpha: 0.3 } as const
+const LIMIT_LINE = { width: 3, color: 0xffffff, alpha: 0.35 } as const
 
 /**
  * Water and islands. Everything here is static except the water, which drifts slowly while
  * the match runs. Island art is laid over the exact collision shapes from the arena config.
+ *
+ * The water is not limited to the arena: `cover` stretches it over the whole visible area,
+ * letterbox included, so the sea always fills the screen. The arena itself keeps its size
+ * and proportions; outside it the sea is dimmed and a line marks where ships must stay.
  */
 export class ArenaBackground {
   readonly container = new Container()
   private readonly water: TilingSprite
+  private readonly outside = new Graphics()
+  private readonly drift = { x: 0, y: 0 }
 
-  constructor(arena: ArenaConfig, textures: GameTextures) {
+  constructor(
+    private readonly arena: ArenaConfig,
+    textures: GameTextures,
+  ) {
     this.water = new TilingSprite({ texture: textures.water, width: arena.width, height: arena.height })
 
     const shallows = new Graphics()
@@ -38,12 +50,40 @@ export class ArenaBackground {
       for (const decoration of decorate(island, index, textures)) islands.addChild(decoration)
     })
 
-    this.container.addChild(this.water, shallows, islands)
+    this.container.addChild(this.water, this.outside, shallows, islands)
+    this.cover(0, 0, arena.width, arena.height)
+  }
+
+  /**
+   * Extends the sea over the visible area, given in arena coordinates (it may start at
+   * negative values and exceed the arena on any side).
+   */
+  cover(left: number, top: number, width: number, height: number): void {
+    this.water.position.set(left, top)
+    this.water.width = width
+    this.water.height = height
+    this.alignWater()
+
+    const { width: w, height: h } = this.arena
+    this.outside
+      .clear()
+      .rect(left, top, width, height)
+      .fill(OUTSIDE_DIM)
+      .rect(0, 0, w, h)
+      .cut()
+      .rect(0, 0, w, h)
+      .stroke({ ...LIMIT_LINE, alignment: 0 })
   }
 
   update(dt: number): void {
-    this.water.tilePosition.x += WATER_DRIFT.x * dt
-    this.water.tilePosition.y += WATER_DRIFT.y * dt
+    this.drift.x += WATER_DRIFT.x * dt
+    this.drift.y += WATER_DRIFT.y * dt
+    this.alignWater()
+  }
+
+  /** Anchors the tile pattern to the arena origin, so moving or resizing never shifts the waves. */
+  private alignWater(): void {
+    this.water.tilePosition.set(this.drift.x - this.water.x, this.drift.y - this.water.y)
   }
 }
 

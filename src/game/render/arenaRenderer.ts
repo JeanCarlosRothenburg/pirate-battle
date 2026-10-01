@@ -111,6 +111,14 @@ export class ArenaRenderer {
     const box = fitLetterbox(screenWidth, screenHeight, width, height, this.letterbox)
     this.world.scale.set(box.scale)
     this.world.position.set(box.offsetX, box.offsetY)
+    // The whole screen in arena coordinates, plus a pixel of overlap against rounding seams.
+    const bleed = 1 / box.scale
+    this.background.cover(
+      -box.offsetX / box.scale - bleed,
+      -box.offsetY / box.scale - bleed,
+      screenWidth / box.scale + bleed * 2,
+      screenHeight / box.scale + bleed * 2,
+    )
   }
 
   /** Clears effects left over from the previous match. */
